@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -27,14 +28,12 @@ func TestLicensesCommand(t *testing.T) {
 		cleanup := chdir(t, repoDir)
 		defer cleanup()
 
-		// Initialize database
 		rootCmd := cmd.NewRootCmd()
 		rootCmd.SetArgs([]string{"init"})
 		if err := rootCmd.Execute(); err != nil {
 			t.Fatalf("init failed: %v", err)
 		}
 
-		// Run licenses --permissive (should fail due to LGPL)
 		var stdout, stderr bytes.Buffer
 		rootCmd = cmd.NewRootCmd()
 		rootCmd.SetArgs([]string{"licenses", "--permissive"})
@@ -42,23 +41,21 @@ func TestLicensesCommand(t *testing.T) {
 		rootCmd.SetErr(&stderr)
 
 		err := rootCmd.Execute()
-
 		output := stdout.String()
 
-		// Should contain flagged output for non-permissive license
-		if !strings.Contains(output, "FLAGGED") && !strings.Contains(output, "not permissive") {
-			// If sidekiq's LGPL license was fetched, it should be flagged
-			// But if API call failed or returned unknown, check for that
-			if strings.Contains(output, "sidekiq") {
-				t.Logf("Output: %s", output)
-				// Only fail if we got license data but didn't flag it
-				if strings.Contains(output, "LGPL") && !strings.Contains(output, "FLAGGED") {
-					t.Error("expected LGPL license to be flagged as not permissive")
-				}
-			}
+		// Test must verify one of these outcomes:
+		// 1. LGPL was detected and flagged (success)
+		// 2. Command ran without error and produced output (acceptable if API unavailable)
+		if len(output) == 0 && err != nil {
+			t.Fatalf("licenses command failed with no output: %v", err)
 		}
 
-		// If there are violations, command should return error
+		// If LGPL is in output but not flagged, that's a bug
+		if strings.Contains(output, "LGPL") && !strings.Contains(output, "FLAGGED") {
+			t.Error("LGPL license detected but not flagged as non-permissive")
+		}
+
+		// If flagged, command must return error
 		if strings.Contains(output, "FLAGGED") && err == nil {
 			t.Error("expected command to return error when violations found")
 		}
@@ -77,19 +74,23 @@ func TestLicensesCommand(t *testing.T) {
 			t.Fatalf("init failed: %v", err)
 		}
 
-		// Run licenses --deny LGPL
-		var stdout bytes.Buffer
+		var stdout, stderr bytes.Buffer
 		rootCmd = cmd.NewRootCmd()
 		rootCmd.SetArgs([]string{"licenses", "--deny", "LGPL"})
 		rootCmd.SetOut(&stdout)
+		rootCmd.SetErr(&stderr)
 
 		err := rootCmd.Execute()
 		output := stdout.String()
 
-		// If sidekiq was found with LGPL, it should be denied
+		if len(output) == 0 && err != nil {
+			t.Fatalf("licenses command failed with no output: %v", err)
+		}
+
+		// If LGPL is detected, it must be flagged as denied
 		if strings.Contains(output, "LGPL") {
-			if !strings.Contains(output, "FLAGGED") || !strings.Contains(output, "denied") {
-				t.Error("expected LGPL license to be flagged as denied")
+			if !strings.Contains(output, "FLAGGED") {
+				t.Error("LGPL license detected but not flagged as denied")
 			}
 			if err == nil {
 				t.Error("expected command to return error when denied license found")
@@ -110,19 +111,23 @@ func TestLicensesCommand(t *testing.T) {
 			t.Fatalf("init failed: %v", err)
 		}
 
-		// Run licenses --copyleft
-		var stdout bytes.Buffer
+		var stdout, stderr bytes.Buffer
 		rootCmd = cmd.NewRootCmd()
 		rootCmd.SetArgs([]string{"licenses", "--copyleft"})
 		rootCmd.SetOut(&stdout)
+		rootCmd.SetErr(&stderr)
 
 		err := rootCmd.Execute()
 		output := stdout.String()
 
-		// If sidekiq was found with LGPL, it should be flagged as copyleft
+		if len(output) == 0 && err != nil {
+			t.Fatalf("licenses command failed with no output: %v", err)
+		}
+
+		// If LGPL is detected, it must be flagged as copyleft
 		if strings.Contains(output, "LGPL") {
-			if !strings.Contains(output, "FLAGGED") || !strings.Contains(output, "copyleft") {
-				t.Error("expected LGPL license to be flagged as copyleft")
+			if !strings.Contains(output, "FLAGGED") {
+				t.Error("LGPL license detected but not flagged as copyleft")
 			}
 			if err == nil {
 				t.Error("expected command to return error when copyleft license found")
@@ -143,20 +148,32 @@ func TestLicensesCommand(t *testing.T) {
 			t.Fatalf("init failed: %v", err)
 		}
 
-		var stdout bytes.Buffer
+		var stdout, stderr bytes.Buffer
 		rootCmd = cmd.NewRootCmd()
 		rootCmd.SetArgs([]string{"licenses", "--format", "json"})
 		rootCmd.SetOut(&stdout)
+		rootCmd.SetErr(&stderr)
 
-		if err := rootCmd.Execute(); err != nil {
-			// May fail if API returns violations, that's ok
-			t.Logf("command returned error (may be expected): %v", err)
-		}
+		// Command may return error if there are violations, that's expected
+		_ = rootCmd.Execute()
 
 		output := stdout.String()
-		// Should be valid JSON array
-		if !strings.HasPrefix(strings.TrimSpace(output), "[") {
-			t.Errorf("expected JSON array output, got: %s", output[:min(100, len(output))])
+		if len(output) == 0 {
+			t.Fatal("expected JSON output, got empty string")
+		}
+
+		// Must be valid JSON array
+		var result []map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &result); err != nil {
+			t.Fatalf("failed to parse JSON output: %v\nOutput: %s", err, output)
+		}
+
+		// If we got results, validate structure
+		if len(result) > 0 {
+			first := result[0]
+			if _, ok := first["name"]; !ok {
+				t.Error("expected 'name' field in license JSON")
+			}
 		}
 	})
 
@@ -173,20 +190,23 @@ func TestLicensesCommand(t *testing.T) {
 			t.Fatalf("init failed: %v", err)
 		}
 
-		// Only allow MIT - anything else should be flagged
-		var stdout bytes.Buffer
+		var stdout, stderr bytes.Buffer
 		rootCmd = cmd.NewRootCmd()
 		rootCmd.SetArgs([]string{"licenses", "--allow", "MIT"})
 		rootCmd.SetOut(&stdout)
+		rootCmd.SetErr(&stderr)
 
-		_ = rootCmd.Execute()
+		err := rootCmd.Execute()
 		output := stdout.String()
 
-		// If we got any non-MIT licenses, they should be flagged
-		if strings.Contains(output, "Apache") || strings.Contains(output, "BSD") {
-			if !strings.Contains(output, "not in allow list") {
-				t.Error("expected non-MIT licenses to be flagged as not in allow list")
-			}
+		if len(output) == 0 && err != nil {
+			t.Fatalf("licenses command failed with no output: %v", err)
+		}
+
+		// If non-MIT licenses appear, they must be flagged
+		hasNonMIT := strings.Contains(output, "Apache") || strings.Contains(output, "BSD") || strings.Contains(output, "ISC")
+		if hasNonMIT && !strings.Contains(output, "not in allow list") && !strings.Contains(output, "FLAGGED") {
+			t.Error("non-MIT licenses detected but not flagged")
 		}
 	})
 }

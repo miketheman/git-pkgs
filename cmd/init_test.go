@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/git-pkgs/git-pkgs/cmd"
@@ -72,6 +73,18 @@ func chdir(t *testing.T, dir string) func() {
 			t.Errorf("failed to restore working directory: %v", err)
 		}
 	}
+}
+
+// runCmd executes a command and captures both stdout and stderr
+func runCmd(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	var stdoutBuf, stderrBuf bytes.Buffer
+	rootCmd := cmd.NewRootCmd()
+	rootCmd.SetArgs(args)
+	rootCmd.SetOut(&stdoutBuf)
+	rootCmd.SetErr(&stderrBuf)
+	err = rootCmd.Execute()
+	return stdoutBuf.String(), stderrBuf.String(), err
 }
 
 func TestInitCommand(t *testing.T) {
@@ -190,12 +203,15 @@ func TestInitCommand(t *testing.T) {
 		cleanup := chdir(t, tmpDir)
 		defer cleanup()
 
-		rootCmd := cmd.NewRootCmd()
-		rootCmd.SetArgs([]string{"init"})
-
-		err := rootCmd.Execute()
+		stdout, stderr, err := runCmd(t, "init")
 		if err == nil {
 			t.Error("expected error outside git repo")
+		}
+
+		// Error message should indicate the problem
+		combinedOutput := stdout + stderr + err.Error()
+		if !strings.Contains(combinedOutput, "git") && !strings.Contains(combinedOutput, "repository") {
+			t.Errorf("expected error message to mention git repository, got: %s", combinedOutput)
 		}
 	})
 }

@@ -35,8 +35,11 @@ func TestIntegrityCommand(t *testing.T) {
 
 		output := stdout.String()
 		// Should show packages with integrity hashes
-		if !strings.Contains(output, "sha512") && !strings.Contains(output, "express") {
-			t.Logf("integrity output: %s", output)
+		if !strings.Contains(output, "sha512") {
+			t.Errorf("expected sha512 hash in output, got: %s", output)
+		}
+		if !strings.Contains(output, "express") {
+			t.Errorf("expected 'express' in output, got: %s", output)
 		}
 	})
 
@@ -65,7 +68,7 @@ func TestIntegrityCommand(t *testing.T) {
 		output := stdout.String()
 		// Should report no drift in a single lockfile
 		if !strings.Contains(output, "No integrity drift") && !strings.Contains(output, "drift") {
-			t.Logf("drift output: %s", output)
+			t.Errorf("expected drift-related output, got: %s", output)
 		}
 	})
 
@@ -91,9 +94,22 @@ func TestIntegrityCommand(t *testing.T) {
 			t.Fatalf("integrity failed: %v", err)
 		}
 
-		var result interface{}
+		var result []map[string]interface{}
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		if len(result) == 0 {
+			t.Error("expected at least one package in JSON output")
+		}
+
+		// Validate structure
+		first := result[0]
+		if _, ok := first["name"]; !ok {
+			t.Error("expected 'name' field in integrity JSON")
+		}
+		if _, ok := first["integrity"]; !ok {
+			t.Error("expected 'integrity' field in integrity JSON")
 		}
 	})
 
@@ -173,9 +189,15 @@ func TestStatsCommand(t *testing.T) {
 			t.Fatalf("failed to parse JSON output: %v", err)
 		}
 
-		// Check for branch field (snake_case with json tags)
+		// Check for expected fields
 		if _, ok := result["branch"]; !ok {
 			t.Error("expected 'branch' field in JSON output")
+		}
+		if _, ok := result["current_deps"]; !ok {
+			t.Error("expected 'current_deps' field in JSON output")
+		}
+		if _, ok := result["deps_by_ecosystem"]; !ok {
+			t.Error("expected 'deps_by_ecosystem' field in JSON output")
 		}
 	})
 
@@ -202,8 +224,8 @@ func TestStatsCommand(t *testing.T) {
 		}
 
 		output := stdout.String()
-		if !strings.Contains(output, "Author") && !strings.Contains(output, "Test User") {
-			t.Logf("by-author output: %s", output)
+		if !strings.Contains(output, "Test User") {
+			t.Errorf("expected 'Test User' in by-author output, got: %s", output)
 		}
 	})
 }
@@ -287,9 +309,25 @@ func TestSearchCommand(t *testing.T) {
 			t.Fatalf("search failed: %v", err)
 		}
 
-		var result interface{}
+		var result []map[string]interface{}
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		if len(result) == 0 {
+			t.Error("expected at least one result in JSON output")
+		}
+
+		// Verify express was found
+		foundExpress := false
+		for _, item := range result {
+			if name, _ := item["name"].(string); name == "express" {
+				foundExpress = true
+				break
+			}
+		}
+		if !foundExpress {
+			t.Error("expected 'express' in search results")
 		}
 	})
 }
@@ -320,7 +358,7 @@ func TestTreeCommand(t *testing.T) {
 		output := stdout.String()
 		// Should show tree structure
 		if !strings.Contains(output, "package.json") {
-			t.Logf("tree output: %s", output)
+			t.Errorf("expected 'package.json' in tree output, got: %s", output)
 		}
 	})
 
@@ -346,9 +384,22 @@ func TestTreeCommand(t *testing.T) {
 			t.Fatalf("tree failed: %v", err)
 		}
 
-		var result interface{}
+		var result []map[string]interface{}
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		if len(result) == 0 {
+			t.Error("expected at least one manifest in tree JSON output")
+		}
+
+		// Validate tree structure
+		first := result[0]
+		if _, ok := first["name"]; !ok {
+			t.Error("expected 'name' field in tree JSON")
+		}
+		if _, ok := first["type"]; !ok {
+			t.Error("expected 'type' field in tree JSON")
 		}
 	})
 }
@@ -379,7 +430,11 @@ func TestBlameCommand(t *testing.T) {
 		output := stdout.String()
 		// Should show commit attribution
 		if !strings.Contains(output, "express") {
-			t.Logf("blame output: %s", output)
+			t.Errorf("expected 'express' in blame output, got: %s", output)
+		}
+		// Should show the author who added the dependency
+		if !strings.Contains(output, "Test User") {
+			t.Errorf("expected 'Test User' in blame output, got: %s", output)
 		}
 	})
 
@@ -405,9 +460,25 @@ func TestBlameCommand(t *testing.T) {
 			t.Fatalf("blame failed: %v", err)
 		}
 
-		var result interface{}
+		var result []map[string]interface{}
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		if len(result) == 0 {
+			t.Error("expected at least one entry in blame JSON output")
+		}
+
+		// Validate structure
+		first := result[0]
+		if _, ok := first["name"]; !ok {
+			t.Error("expected 'name' field in blame JSON")
+		}
+		if _, ok := first["author_name"]; !ok {
+			t.Error("expected 'author_name' field in blame JSON")
+		}
+		if _, ok := first["sha"]; !ok {
+			t.Error("expected 'sha' field in blame JSON")
 		}
 	})
 }
@@ -464,9 +535,21 @@ func TestWhyCommand(t *testing.T) {
 			t.Fatalf("why failed: %v", err)
 		}
 
-		var result interface{}
+		var result map[string]interface{}
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		// Should contain the package name
+		if name, _ := result["name"].(string); name != "express" {
+			t.Errorf("expected name 'express', got %q", name)
+		}
+		// Should have commit info
+		if _, ok := result["sha"]; !ok {
+			t.Error("expected 'sha' field in why JSON")
+		}
+		if _, ok := result["message"]; !ok {
+			t.Error("expected 'message' field in why JSON")
 		}
 	})
 }
@@ -522,9 +605,22 @@ func TestWhereCommand(t *testing.T) {
 			t.Fatalf("where failed: %v", err)
 		}
 
-		var result interface{}
+		var result []map[string]interface{}
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		if len(result) == 0 {
+			t.Error("expected at least one location in where JSON output")
+		}
+
+		// Validate structure
+		first := result[0]
+		if _, ok := first["file_path"]; !ok {
+			t.Error("expected 'file_path' field in where JSON")
+		}
+		if _, ok := first["ecosystem"]; !ok {
+			t.Error("expected 'ecosystem' field in where JSON")
 		}
 	})
 }
@@ -554,7 +650,10 @@ func TestStaleCommand(t *testing.T) {
 
 		// With --days 0, all lockfile deps should be stale
 		output := stdout.String()
-		t.Logf("stale output: %s", output)
+		// Should show dependencies from the lockfile as stale
+		if !strings.Contains(output, "express") && !strings.Contains(output, "lodash") {
+			t.Errorf("expected stale dependencies in output, got: %s", output)
+		}
 	})
 
 	t.Run("outputs json format", func(t *testing.T) {
@@ -572,16 +671,27 @@ func TestStaleCommand(t *testing.T) {
 
 		var stdout bytes.Buffer
 		rootCmd = cmd.NewRootCmd()
-		rootCmd.SetArgs([]string{"stale", "--format", "json"})
+		rootCmd.SetArgs([]string{"stale", "--days", "0", "--format", "json"})
 		rootCmd.SetOut(&stdout)
 
 		if err := rootCmd.Execute(); err != nil {
 			t.Fatalf("stale failed: %v", err)
 		}
 
-		var result interface{}
+		var result []map[string]interface{}
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		// With --days 0, should have stale packages
+		if len(result) == 0 {
+			t.Error("expected stale packages in JSON output with --days 0")
+		}
+
+		// Validate structure
+		first := result[0]
+		if _, ok := first["name"]; !ok {
+			t.Error("expected 'name' field in stale JSON")
 		}
 	})
 }

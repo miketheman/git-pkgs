@@ -3,6 +3,7 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -155,6 +156,28 @@ func TestListCommand(t *testing.T) {
 		if len(deps) == 0 {
 			t.Error("expected at least one dependency in JSON output")
 		}
+
+		// Validate structure of first dependency
+		first := deps[0]
+		if _, ok := first["name"]; !ok {
+			t.Error("expected 'name' field in dependency JSON")
+		}
+		if _, ok := first["requirement"]; !ok {
+			t.Error("expected 'requirement' field in dependency JSON")
+		}
+
+		// Check that express or lodash is in the list
+		foundExpected := false
+		for _, dep := range deps {
+			name, _ := dep["name"].(string)
+			if name == "express" || name == "lodash" {
+				foundExpected = true
+				break
+			}
+		}
+		if !foundExpected {
+			t.Error("expected 'express' or 'lodash' in JSON output")
+		}
 	})
 
 	t.Run("stateless mode works without database", func(t *testing.T) {
@@ -206,10 +229,12 @@ func TestShowCommand(t *testing.T) {
 		}
 
 		output := stdout.String()
-		// HEAD commit added dependencies
-		if !strings.Contains(output, "express") && !strings.Contains(output, "added") {
-			// Either shows the deps or says no changes (depends on which commit HEAD points to)
-			t.Logf("show output: %s", output)
+		// HEAD commit added dependencies, should show express as added
+		if !strings.Contains(output, "express") {
+			t.Errorf("expected 'express' in show output, got: %s", output)
+		}
+		if !strings.Contains(output, "added") && !strings.Contains(output, "Added") && !strings.Contains(output, "+") {
+			t.Errorf("expected addition indicator in show output, got: %s", output)
 		}
 	})
 
@@ -236,10 +261,23 @@ func TestShowCommand(t *testing.T) {
 			t.Fatalf("show failed: %v", err)
 		}
 
-		// Should be valid JSON
-		var result interface{}
+		// Should be valid JSON array of changes
+		var result []map[string]interface{}
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		if len(result) == 0 {
+			t.Error("expected at least one change in show JSON")
+		}
+
+		// Validate structure of changes
+		first := result[0]
+		if _, ok := first["name"]; !ok {
+			t.Error("expected 'name' field in show JSON")
+		}
+		if _, ok := first["change_type"]; !ok {
+			t.Error("expected 'change_type' field in show JSON")
 		}
 	})
 
@@ -289,7 +327,11 @@ func TestDiffCommand(t *testing.T) {
 		output := stdout.String()
 		// Should show express was added
 		if !strings.Contains(output, "express") {
-			t.Logf("diff output: %s", output)
+			t.Errorf("expected 'express' in diff output, got: %s", output)
+		}
+		// Should indicate it was added
+		if !strings.Contains(output, "added") && !strings.Contains(output, "Added") && !strings.Contains(output, "+") {
+			t.Errorf("expected addition indicator in diff output, got: %s", output)
 		}
 	})
 
@@ -321,8 +363,28 @@ func TestDiffCommand(t *testing.T) {
 			t.Fatalf("failed to parse JSON output: %v", err)
 		}
 
+		// Diff returns an object with added/removed/updated arrays (may be omitted if empty)
 		if _, ok := result["added"]; !ok {
 			t.Error("expected 'added' field in JSON output")
+		}
+
+		// Verify express is in the added list
+		added, ok := result["added"].([]interface{})
+		if !ok {
+			t.Error("expected 'added' to be an array")
+		} else {
+			foundExpress := false
+			for _, item := range added {
+				if dep, ok := item.(map[string]interface{}); ok {
+					if name, _ := dep["name"].(string); name == "express" {
+						foundExpress = true
+						break
+					}
+				}
+			}
+			if !foundExpress {
+				t.Error("expected 'express' in added dependencies")
+			}
 		}
 	})
 
@@ -370,9 +432,9 @@ func TestLogCommand(t *testing.T) {
 		}
 
 		output := stdout.String()
-		// Should list commits
+		// Should list commits with dependency changes
 		if !strings.Contains(output, "Add") {
-			t.Logf("log output: %s", output)
+			t.Errorf("expected commit message containing 'Add' in log output, got: %s", output)
 		}
 	})
 
@@ -432,9 +494,22 @@ func TestLogCommand(t *testing.T) {
 			t.Fatalf("log failed: %v", err)
 		}
 
-		var result interface{}
-		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		var commits []map[string]interface{}
+		if err := json.Unmarshal(stdout.Bytes(), &commits); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		if len(commits) == 0 {
+			t.Error("expected at least one commit in JSON output")
+		}
+
+		// Validate commit structure
+		first := commits[0]
+		if _, ok := first["sha"]; !ok {
+			t.Error("expected 'sha' field in commit JSON")
+		}
+		if _, ok := first["message"]; !ok {
+			t.Error("expected 'message' field in commit JSON")
 		}
 	})
 }
@@ -465,7 +540,14 @@ func TestHistoryCommand(t *testing.T) {
 
 		output := stdout.String()
 		if !strings.Contains(output, "lodash") {
-			t.Logf("history output: %s", output)
+			t.Errorf("expected 'lodash' in history output, got: %s", output)
+		}
+		// Should show both versions
+		if !strings.Contains(output, "4.17.0") {
+			t.Errorf("expected old version '4.17.0' in history output, got: %s", output)
+		}
+		if !strings.Contains(output, "4.17.21") {
+			t.Errorf("expected new version '4.17.21' in history output, got: %s", output)
 		}
 	})
 
@@ -514,9 +596,172 @@ func TestHistoryCommand(t *testing.T) {
 			t.Fatalf("history failed: %v", err)
 		}
 
-		var result interface{}
+		var result []map[string]interface{}
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v", err)
+		}
+
+		if len(result) == 0 {
+			t.Error("expected at least one history entry in JSON output")
+		}
+
+		// Validate structure
+		first := result[0]
+		if _, ok := first["name"]; !ok {
+			t.Error("expected 'name' field in history JSON")
+		}
+		if _, ok := first["requirement"]; !ok {
+			t.Error("expected 'requirement' field in history JSON")
+		}
+		if _, ok := first["change_type"]; !ok {
+			t.Error("expected 'change_type' field in history JSON")
+		}
+	})
+}
+
+func TestBranchBehavior(t *testing.T) {
+	t.Run("list works on feature branch", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add deps on main")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		// Create and switch to feature branch
+		gitCmd := exec.Command("git", "checkout", "-b", "feature")
+		gitCmd.Dir = repoDir
+		if err := gitCmd.Run(); err != nil {
+			t.Fatalf("failed to create branch: %v", err)
+		}
+
+		// Add different deps on feature branch
+		addFileAndCommit(t, repoDir, "package.json", `{"dependencies":{"axios":"^1.0.0"}}`, "Add axios on feature")
+
+		// Initialize database
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"init"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		// List should show feature branch deps
+		var stdout bytes.Buffer
+		rootCmd = cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"list"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("list failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, "axios") {
+			t.Errorf("expected 'axios' from feature branch, got: %s", output)
+		}
+	})
+
+	t.Run("branch flag queries specific branch", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add deps on main")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		// Create feature branch with different deps
+		gitCmd := exec.Command("git", "checkout", "-b", "feature")
+		gitCmd.Dir = repoDir
+		if err := gitCmd.Run(); err != nil {
+			t.Fatalf("failed to create branch: %v", err)
+		}
+
+		addFileAndCommit(t, repoDir, "package.json", `{"dependencies":{"axios":"^1.0.0"}}`, "Add axios")
+
+		// Initialize database (will index current branch)
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"init"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		// Query current (feature) branch - should have axios
+		var stdout bytes.Buffer
+		rootCmd = cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"list"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("list failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, "axios") {
+			t.Errorf("expected 'axios' on feature branch, got: %s", output)
+		}
+
+		// Switch back to main and re-init to index main branch
+		gitCmd = exec.Command("git", "checkout", "main")
+		gitCmd.Dir = repoDir
+		if err := gitCmd.Run(); err != nil {
+			t.Fatalf("failed to checkout main: %v", err)
+		}
+
+		rootCmd = cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"init", "--force"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("init main failed: %v", err)
+		}
+
+		// Query main branch - should have express
+		stdout.Reset()
+		rootCmd = cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"list"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("list main failed: %v", err)
+		}
+
+		output = stdout.String()
+		if !strings.Contains(output, "express") {
+			t.Errorf("expected 'express' on main branch, got: %s", output)
+		}
+	})
+
+	t.Run("diff between branches", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add deps on main")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		// Create feature branch
+		gitCmd := exec.Command("git", "checkout", "-b", "feature")
+		gitCmd.Dir = repoDir
+		if err := gitCmd.Run(); err != nil {
+			t.Fatalf("failed to create branch: %v", err)
+		}
+
+		addFileAndCommit(t, repoDir, "package.json", `{"dependencies":{"express":"^4.18.0","axios":"^1.0.0"}}`, "Add axios")
+
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"init"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		// Diff main..feature should show axios added
+		var stdout bytes.Buffer
+		rootCmd = cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff", "main..feature", "--stateless"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, "axios") {
+			t.Errorf("expected 'axios' in diff output, got: %s", output)
 		}
 	})
 }
