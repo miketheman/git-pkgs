@@ -75,12 +75,9 @@ func setupBenchIndexerRepo(b *testing.B, numCommits, depsPerCommit int) (string,
 func generatePackageJSON(numDeps, version int) string {
 	deps := make([]string, numDeps)
 	for i := 0; i < numDeps; i++ {
-		// Vary some versions based on commit number
-		v := "1.0.0"
-		if i < version {
-			v = "2.0.0"
-		}
-		deps[i] = `"package-` + string(rune('a'+i%26)) + `-` + string(rune('0'+i/26)) + `": "^` + v + `"`
+		// Vary versions based on commit number - use modulo to cycle through versions
+		v := ((i + version) % 3) + 1 // cycles through 1, 2, 3
+		deps[i] = `"package-` + string(rune('a'+i%26)) + `-` + string(rune('0'+i/26)) + `": "^` + string(rune('0'+v)) + `.0.0"`
 	}
 	return `{"name":"test","version":"1.0.0","dependencies":{` + strings.Join(deps, ",") + `}}`
 }
