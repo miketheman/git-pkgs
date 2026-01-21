@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/ecosyste-ms/ecosystems-go v0.0.0-20260115154313-d5f3879b6ec0
 	github.com/git-pkgs/managers v0.3.0
-	github.com/git-pkgs/manifests v0.1.2
+	github.com/git-pkgs/manifests v0.1.3
 	github.com/git-pkgs/registries v0.2.0
 	github.com/git-pkgs/spdx v0.1.0
 	github.com/git-pkgs/vers v0.2.0
@@ -13,7 +13,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/package-url/packageurl-go v0.1.3
 	github.com/spf13/cobra v1.10.2
-	modernc.org/sqlite v1.44.1
+	modernc.org/sqlite v1.44.3
 )
 
 replace github.com/package-url/packageurl-go => github.com/git-pkgs/packageurl-go v0.0.0-20260115093137-a0c26f7ee19e

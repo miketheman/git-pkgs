@@ -1,6 +1,6 @@
 # git-pkgs
 
-A git subcommand for tracking package dependencies across git history. Analyzes your repository to show when dependencies were added, modified, or removed, who made those changes, and why.
+A git subcommand for tracking package dependencies across git history. Analyzes your repository to show when dependencies were added, modified, or removed, who made those changes, and why. This is a rewrite of the [original Ruby version](https://github.com/andrew/git-pkgs).
 
 [Installation](#installation) · [Quick start](#quick-start) · [Commands](#commands) · [Configuration](#configuration) · [Contributing](#contributing)
 
