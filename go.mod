@@ -7,7 +7,7 @@ require (
 	github.com/git-pkgs/managers v0.3.0
 	github.com/git-pkgs/manifests v0.1.3
 	github.com/git-pkgs/purl v0.1.1
-	github.com/git-pkgs/registries v0.2.0
+	github.com/git-pkgs/registries v0.2.1
 	github.com/git-pkgs/spdx v0.1.0
 	github.com/git-pkgs/vers v0.2.0
 	github.com/go-git/go-git/v5 v5.16.4
