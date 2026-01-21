@@ -10,6 +10,7 @@ import (
 	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/git-pkgs/internal/enrichment"
 	"github.com/git-pkgs/git-pkgs/internal/git"
+	"github.com/git-pkgs/purl"
 	"github.com/spf13/cobra"
 )
 
@@ -197,13 +198,13 @@ func runSBOM(cmd *cobra.Command, args []string) error {
 		purls := make([]string, 0, len(deps))
 		purlToDep := make(map[string]database.Dependency)
 		for _, d := range deps {
-			purl := d.PURL
-			if purl == "" {
-				purl = buildPURL(d.Ecosystem, d.Name)
+			purlStr := d.PURL
+			if purlStr == "" {
+				purlStr = purl.MakePURLString(d.Ecosystem, d.Name, "")
 			}
-			if purl != "" {
-				purls = append(purls, purl)
-				purlToDep[purl] = d
+			if purlStr != "" {
+				purls = append(purls, purlStr)
+				purlToDep[purlStr] = d
 			}
 		}
 
@@ -310,20 +311,20 @@ func generateCycloneDX(cmd *cobra.Command, deps []database.Dependency, licenseMa
 	}
 
 	for _, dep := range deps {
-		purl := dep.PURL
-		if purl == "" {
-			purl = buildPURL(dep.Ecosystem, dep.Name)
+		purlStr := dep.PURL
+		if purlStr == "" {
+			purlStr = purl.MakePURLString(dep.Ecosystem, dep.Name, "")
 		}
 
 		comp := CycloneDXComponent{
 			Type:    "library",
-			BOMRef:  purl,
+			BOMRef:  purlStr,
 			Name:    dep.Name,
 			Version: dep.Requirement,
-			PURL:    purl,
+			PURL:    purlStr,
 		}
 
-		if licenses, ok := licenseMap[purl]; ok {
+		if licenses, ok := licenseMap[purlStr]; ok {
 			for _, lic := range licenses {
 				comp.Licenses = append(comp.Licenses, CycloneDXLicense{ID: lic})
 			}
@@ -367,9 +368,9 @@ func generateSPDX(cmd *cobra.Command, deps []database.Dependency, licenseMap map
 	sbom.Packages = append(sbom.Packages, rootPkg)
 
 	for i, dep := range deps {
-		purl := dep.PURL
-		if purl == "" {
-			purl = buildPURL(dep.Ecosystem, dep.Name)
+		purlStr := dep.PURL
+		if purlStr == "" {
+			purlStr = purl.MakePURLString(dep.Ecosystem, dep.Name, "")
 		}
 
 		pkg := SPDXPackage{
@@ -379,7 +380,7 @@ func generateSPDX(cmd *cobra.Command, deps []database.Dependency, licenseMap map
 			DownloadLocation: "NOASSERTION",
 		}
 
-		if licenses, ok := licenseMap[purl]; ok && len(licenses) > 0 {
+		if licenses, ok := licenseMap[purlStr]; ok && len(licenses) > 0 {
 			pkg.LicenseConcluded = licenses[0]
 			pkg.LicenseDeclared = licenses[0]
 		} else {
@@ -387,12 +388,12 @@ func generateSPDX(cmd *cobra.Command, deps []database.Dependency, licenseMap map
 			pkg.LicenseDeclared = "NOASSERTION"
 		}
 
-		if purl != "" {
+		if purlStr != "" {
 			pkg.ExternalRefs = []SPDXExternalRef{
 				{
 					ReferenceCategory: "PACKAGE-MANAGER",
 					ReferenceType:     "purl",
-					ReferenceLocator:  purl,
+					ReferenceLocator:  purlStr,
 				},
 			}
 		}

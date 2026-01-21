@@ -12,6 +12,7 @@ import (
 	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/git-pkgs/internal/enrichment"
 	"github.com/git-pkgs/git-pkgs/internal/git"
+	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/spdx"
 	"github.com/spf13/cobra"
 )
@@ -144,13 +145,13 @@ func runLicenses(cmd *cobra.Command, args []string) error {
 	purls := make([]string, 0, len(directDeps))
 	purlToDep := make(map[string]database.Dependency)
 	for _, d := range directDeps {
-		purl := d.PURL
-		if purl == "" {
-			purl = buildPURL(d.Ecosystem, d.Name)
+		purlStr := d.PURL
+		if purlStr == "" {
+			purlStr = purl.MakePURLString(d.Ecosystem, d.Name, "")
 		}
-		if purl != "" {
-			purls = append(purls, purl)
-			purlToDep[purl] = d
+		if purlStr != "" {
+			purls = append(purls, purlStr)
+			purlToDep[purlStr] = d
 		}
 	}
 

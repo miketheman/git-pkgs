@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/vers"
 )
 
@@ -116,7 +117,7 @@ func (c *Client) Query(ctx context.Context, ecosystem, name, version string) ([]
 	req := QueryRequest{
 		Version: version,
 		Package: Package{
-			Ecosystem: normalizeEcosystem(ecosystem),
+			Ecosystem: purl.EcosystemToOSV(ecosystem),
 			Name:      name,
 		},
 	}
@@ -159,7 +160,7 @@ func (c *Client) BatchQuery(ctx context.Context, queries []QueryRequest) ([][]Vu
 
 	// Normalize ecosystems
 	for i := range queries {
-		queries[i].Package.Ecosystem = normalizeEcosystem(queries[i].Package.Ecosystem)
+		queries[i].Package.Ecosystem = purl.EcosystemToOSV(queries[i].Package.Ecosystem)
 	}
 
 	// OSV batch API has a limit of 1000 queries per request
@@ -241,35 +242,6 @@ func (c *Client) GetVulnerability(ctx context.Context, id string) (*Vulnerabilit
 	return &vuln, nil
 }
 
-// normalizeEcosystem converts our ecosystem names to OSV ecosystem names.
-func normalizeEcosystem(ecosystem string) string {
-	switch strings.ToLower(ecosystem) {
-	case "gem", "rubygems":
-		return "RubyGems"
-	case "npm":
-		return "npm"
-	case "pypi":
-		return "PyPI"
-	case "cargo":
-		return "crates.io"
-	case "go", "golang":
-		return "Go"
-	case "maven":
-		return "Maven"
-	case "nuget":
-		return "NuGet"
-	case "composer", "packagist":
-		return "Packagist"
-	case "hex":
-		return "Hex"
-	case "pub":
-		return "Pub"
-	case "cocoapods":
-		return "CocoaPods"
-	default:
-		return ecosystem
-	}
-}
 
 // GetSeverityLevel returns a normalized severity level from a vulnerability.
 func GetSeverityLevel(v *Vulnerability) string {

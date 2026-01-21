@@ -10,6 +10,7 @@ import (
 	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/git-pkgs/internal/enrichment"
 	"github.com/git-pkgs/git-pkgs/internal/git"
+	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/vers"
 	"github.com/spf13/cobra"
 )
@@ -139,14 +140,14 @@ func runOutdated(cmd *cobra.Command, args []string) error {
 	purls := make([]string, 0, len(lockfileDeps))
 	purlToDep := make(map[string]database.Dependency)
 	for _, d := range lockfileDeps {
-		purl := d.PURL
-		if purl == "" {
+		purlStr := d.PURL
+		if purlStr == "" {
 			// Build PURL from ecosystem and name
-			purl = buildPURL(d.Ecosystem, d.Name)
+			purlStr = purl.MakePURLString(d.Ecosystem, d.Name, "")
 		}
-		if purl != "" {
-			purls = append(purls, purl)
-			purlToDep[purl] = d
+		if purlStr != "" {
+			purls = append(purls, purlStr)
+			purlToDep[purlStr] = d
 		}
 	}
 
@@ -368,35 +369,6 @@ func findLatestAtDateCached(db *database.DB, ecosystem, name, purl string, atTim
 	}
 
 	return latestVersion
-}
-
-func buildPURL(ecosystem, name string) string {
-	switch strings.ToLower(ecosystem) {
-	case "npm":
-		return "pkg:npm/" + name
-	case "gem", "rubygems":
-		return "pkg:gem/" + name
-	case "pypi":
-		return "pkg:pypi/" + name
-	case "cargo":
-		return "pkg:cargo/" + name
-	case "go", "golang":
-		return "pkg:golang/" + name
-	case "maven":
-		return "pkg:maven/" + name
-	case "nuget":
-		return "pkg:nuget/" + name
-	case "composer", "packagist":
-		return "pkg:composer/" + name
-	case "hex":
-		return "pkg:hex/" + name
-	case "pub":
-		return "pkg:pub/" + name
-	case "cocoapods":
-		return "pkg:cocoapods/" + name
-	default:
-		return ""
-	}
 }
 
 func classifyUpdate(current, latest string) string {

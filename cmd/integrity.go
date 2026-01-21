@@ -11,6 +11,7 @@ import (
 	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/git-pkgs/internal/enrichment"
 	"github.com/git-pkgs/git-pkgs/internal/git"
+	"github.com/git-pkgs/purl"
 	"github.com/spf13/cobra"
 )
 
@@ -341,14 +342,13 @@ func runRegistryCheck(cmd *cobra.Command, deps []database.Dependency, format str
 			registryHash = cached
 		} else {
 			// Build versioned PURL
-			purl := buildPURL(d.Ecosystem, d.Name)
-			if purl == "" {
+			purlStr := purl.MakePURLString(d.Ecosystem, d.Name, d.Requirement)
+			if purlStr == "" {
 				skipped++
 				continue
 			}
-			purl = purl + "@" + d.Requirement
 
-			version, err := client.GetVersion(ctx, purl)
+			version, err := client.GetVersion(ctx, purlStr)
 			if err != nil || version == nil {
 				skipped++
 				continue
