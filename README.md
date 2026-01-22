@@ -282,6 +282,25 @@ git pkgs install -x --legacy-peer-deps      # pass extra flags
 git pkgs add lodash -x --save-exact         # npm --save-exact
 ```
 
+### Browse package source
+
+Open the source code of an installed package in your editor:
+
+```bash
+git pkgs browse lodash           # open in $EDITOR
+git pkgs browse lodash --path    # just print the path
+git pkgs browse lodash --open    # open in file browser
+git pkgs browse serde -m cargo   # specify manager
+```
+
+Use `--path` for scripting:
+
+```bash
+cat $(git pkgs browse lodash --path)/package.json
+```
+
+Returns exit code 2 if the package manager doesn't support path lookup.
+
 ### Check licenses
 
 ```bash
