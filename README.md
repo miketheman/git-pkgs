@@ -536,6 +536,18 @@ GIT_PKGS_DIRECT=1 git pkgs outdated  # one-off via environment
 
 By default, git-pkgs uses a hybrid approach: packages with a `repository_url` qualifier in their PURL (indicating a private registry) are queried directly, while public packages go through ecosyste.ms for efficiency.
 
+**Private registries and proxies:** For commands that query registries (`outdated`, `licenses`, SBOM enrichment), git-pkgs extracts registry URLs from lockfiles when available:
+
+- npm: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `bun.lock` (from `resolved` URLs)
+- pypi: `Pipfile.lock`, `poetry.lock`, `uv.lock` (from source configuration)
+- cargo: `Cargo.lock` (from `source` field)
+- composer: `composer.lock` (from `dist.url`)
+- gem: `Gemfile.lock` (from `remote:` sections)
+
+If your lockfile points to a private registry (like Artifactory or GitHub Packages), those URLs are used automatically. However, git-pkgs doesn't currently read config files like `.npmrc` or `.pypirc` for registry URLs or credentials. Authenticated private registries aren't supported yet for registry queries.
+
+Commands that run package managers (`install`, `add`, `remove`, `update`) delegate to the actual CLI tools, which respect their native configuration. See the [managers documentation](https://github.com/git-pkgs/managers#configuration-files) for details.
+
 **Environment variables:**
 
 - `GIT_DIR` - git directory location (standard git variable)
