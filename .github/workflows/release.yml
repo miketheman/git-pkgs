@@ -67,6 +67,14 @@ jobs:
         with:
           path: dist
 
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Generate man pages
+        run: go run scripts/generate-man.go
+
       - name: Prepare release assets
         run: |
           mkdir -p release
@@ -75,11 +83,11 @@ jobs:
             # Check for .exe (Windows) or plain binary
             if [ -f "${dir}${name}.exe" ]; then
               cp "${dir}${name}.exe" "release/${name}.exe"
-              (cd release && zip "${name}.zip" "${name}.exe" && rm "${name}.exe")
+              (cd release && zip "${name}.zip" "${name}.exe" ../man/*.1 && rm "${name}.exe")
             elif [ -f "${dir}${name}" ]; then
               cp "${dir}${name}" "release/${name}"
               chmod +x "release/${name}"
-              (cd release && tar -czf "${name}.tar.gz" "${name}" && rm "${name}")
+              (cd release && tar -czf "${name}.tar.gz" "${name}" -C .. man && rm "${name}")
             fi
           done
           (cd release && sha256sum *.tar.gz *.zip 2>/dev/null > checksums.txt)
