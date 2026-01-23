@@ -16,10 +16,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	now := time.Now()
 	header := &doc.GenManHeader{
 		Title:   "GIT-PKGS",
 		Section: "1",
-		Date:    &time.Time{},
+		Date:    &now,
 		Source:  "git-pkgs",
 		Manual:  "Git Pkgs Manual",
 	}
