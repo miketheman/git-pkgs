@@ -387,6 +387,19 @@ git pkgs diff main..feature --stateless  # no database needed
 
 This shows added, removed, and modified packages with version info.
 
+### Diff between files
+
+Compare dependencies between two manifest files directly, without a git repository or database:
+
+```bash
+git pkgs diff-file Gemfile.lock.old Gemfile.lock
+git pkgs diff-file /path/to/project-a/package.json /path/to/project-b/package.json
+git pkgs diff-file before.lock after.lock --filename=Gemfile.lock  # override type detection
+git pkgs diff-file old.lock new.lock -f json  # JSON output
+```
+
+Useful for comparing dependencies across different projects, archived source code without git history, or repositories using other version control systems.
+
 ### Show changes in a commit
 
 ```bash
