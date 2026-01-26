@@ -60,3 +60,59 @@ func TestTreeMultipleVersionsSamePackage(t *testing.T) {
 		t.Errorf("expected isexe 3.1.1 in tree output\nOutput:\n%s", output)
 	}
 }
+
+func TestTreeGoToolDependencies(t *testing.T) {
+	// Regression test for https://github.com/git-pkgs/git-pkgs/issues/38
+	// Go tool dependencies should be classified as "development" not "runtime"
+	// Uses real-world fixture from github.com/ericcornelissen/ades
+
+	repoDir := createTestRepo(t)
+
+	goMod, err := os.ReadFile("testdata/ades-go.mod")
+	if err != nil {
+		t.Fatalf("failed to read fixture: %v", err)
+	}
+
+	addFileAndCommit(t, repoDir, "go.mod", string(goMod), "Add go.mod")
+
+	cleanup := chdir(t, repoDir)
+	defer cleanup()
+
+	rootCmd := cmd.NewRootCmd()
+	rootCmd.SetArgs([]string{"init"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	rootCmd = cmd.NewRootCmd()
+	rootCmd.SetArgs([]string{"tree"})
+	rootCmd.SetOut(&stdout)
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tree failed: %v", err)
+	}
+
+	output := stdout.String()
+
+	// mvdan.cc/unparam is a tool dependency and should be under development, not runtime
+	if strings.Contains(output, "runtime") && strings.Contains(output, "mvdan.cc/unparam") {
+		// Check if unparam appears after "runtime" header but before "development" header
+		runtimeIdx := strings.Index(output, "runtime")
+		devIdx := strings.Index(output, "development")
+		unparamIdx := strings.Index(output, "mvdan.cc/unparam")
+
+		if devIdx == -1 || (runtimeIdx != -1 && unparamIdx > runtimeIdx && unparamIdx < devIdx) {
+			t.Errorf("mvdan.cc/unparam should be under development, not runtime\nOutput:\n%s", output)
+		}
+	}
+
+	// Verify development section exists and contains tool dependencies
+	if !strings.Contains(output, "development") {
+		t.Errorf("expected development section in tree output\nOutput:\n%s", output)
+	}
+
+	// gochecknoinits is a tool dependency
+	if !strings.Contains(output, "4d63.com/gochecknoinits") {
+		t.Errorf("expected 4d63.com/gochecknoinits in tree output\nOutput:\n%s", output)
+	}
+}
