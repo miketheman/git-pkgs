@@ -66,7 +66,7 @@ func runInfo(cmd *cobra.Command, args []string) error {
 			} else {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Tracked ecosystems:")
 				for _, eco := range info.Ecosystems {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", eco)
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s: %d dependencies\n", eco.Name, eco.Count)
 				}
 			}
 		}
@@ -130,7 +130,11 @@ func outputInfoText(cmd *cobra.Command, info *database.DatabaseInfo) error {
 	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 
 	if len(info.Ecosystems) > 0 {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Ecosystems: %s\n", strings.Join(info.Ecosystems, ", "))
+		names := make([]string, len(info.Ecosystems))
+		for i, eco := range info.Ecosystems {
+			names[i] = eco.Name
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Ecosystems: %s\n", strings.Join(names, ", "))
 	}
 
 	return nil
