@@ -242,6 +242,9 @@ func TestInfoCommand(t *testing.T) {
 		if !strings.Contains(stdout, "npm") {
 			t.Errorf("expected 'npm' ecosystem, got: %s", stdout)
 		}
+		if !strings.Contains(stdout, "dependencies") {
+			t.Errorf("expected dependency count in output, got: %s", stdout)
+		}
 	})
 
 	t.Run("outputs json format", func(t *testing.T) {
@@ -271,6 +274,41 @@ func TestInfoCommand(t *testing.T) {
 		}
 		if _, ok := info["row_counts"]; !ok {
 			t.Error("expected 'row_counts' in JSON")
+		}
+	})
+
+	t.Run("ecosystems json includes counts", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		_, _, err := runCmd(t, "init")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		stdout, _, err := runCmd(t, "info", "--ecosystems", "-f", "json")
+		if err != nil {
+			t.Fatalf("info --ecosystems json failed: %v", err)
+		}
+
+		var ecosystems []map[string]interface{}
+		if err := json.Unmarshal([]byte(stdout), &ecosystems); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+
+		if len(ecosystems) == 0 {
+			t.Fatal("expected at least one ecosystem")
+		}
+
+		eco := ecosystems[0]
+		if _, ok := eco["name"]; !ok {
+			t.Error("expected 'name' field in ecosystem JSON")
+		}
+		if _, ok := eco["count"]; !ok {
+			t.Error("expected 'count' field in ecosystem JSON")
 		}
 	})
 }

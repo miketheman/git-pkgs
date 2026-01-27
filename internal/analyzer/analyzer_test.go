@@ -151,10 +151,11 @@ func TestAnalyzeCommitWithAddedGemfile(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("expected non-nil result")
+		return
 	}
 
 	if len(result.Changes) != 2 {
-		t.Errorf("expected 2 changes, got %d", len(result.Changes))
+		t.Fatalf("expected 2 changes, got %d", len(result.Changes))
 	}
 
 	var railsChange *analyzer.Change
@@ -167,6 +168,7 @@ func TestAnalyzeCommitWithAddedGemfile(t *testing.T) {
 
 	if railsChange == nil {
 		t.Fatal("expected rails change")
+		return
 	}
 
 	if railsChange.ChangeType != "added" {
@@ -210,10 +212,11 @@ func TestAnalyzeCommitWithModifiedGemfile(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("expected non-nil result")
+		return
 	}
 
 	if len(result.Changes) != 1 {
-		t.Errorf("expected 1 change, got %d", len(result.Changes))
+		t.Fatalf("expected 1 change, got %d", len(result.Changes))
 	}
 
 	ch := result.Changes[0]
@@ -261,10 +264,11 @@ func TestAnalyzeCommitWithRemovedDependency(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("expected non-nil result")
+		return
 	}
 
 	if len(result.Changes) != 1 {
-		t.Errorf("expected 1 change, got %d", len(result.Changes))
+		t.Fatalf("expected 1 change, got %d", len(result.Changes))
 	}
 
 	ch := result.Changes[0]
@@ -300,10 +304,11 @@ func TestAnalyzeCommitWithPackageJSON(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("expected non-nil result")
+		return
 	}
 
 	if len(result.Changes) != 2 {
-		t.Errorf("expected 2 changes, got %d", len(result.Changes))
+		t.Fatalf("expected 2 changes, got %d", len(result.Changes))
 	}
 
 	for _, ch := range result.Changes {

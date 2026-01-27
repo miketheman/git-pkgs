@@ -562,14 +562,19 @@ type StaleEntry struct {
 	DaysSince    int    `json:"days_since"`
 }
 
+type EcosystemCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
 type DatabaseInfo struct {
-	Path            string         `json:"path"`
-	SizeBytes       int64          `json:"size_bytes"`
-	SchemaVersion   int            `json:"schema_version"`
-	BranchName      string         `json:"branch_name"`
-	LastAnalyzedSHA string         `json:"last_analyzed_sha"`
-	RowCounts       map[string]int `json:"row_counts"`
-	Ecosystems      []string       `json:"ecosystems"`
+	Path            string           `json:"path"`
+	SizeBytes       int64            `json:"size_bytes"`
+	SchemaVersion   int              `json:"schema_version"`
+	BranchName      string           `json:"branch_name"`
+	LastAnalyzedSHA string           `json:"last_analyzed_sha"`
+	RowCounts       map[string]int   `json:"row_counts"`
+	Ecosystems      []EcosystemCount `json:"ecosystems"`
 }
 
 func (db *DB) GetDatabaseInfo() (*DatabaseInfo, error) {
@@ -603,18 +608,20 @@ func (db *DB) GetDatabaseInfo() (*DatabaseInfo, error) {
 		info.RowCounts[table] = count
 	}
 
-	// Ecosystems
+	// Ecosystems with counts from snapshots (current state)
 	rows, err := db.Query(`
-		SELECT DISTINCT ecosystem FROM dependency_changes WHERE ecosystem IS NOT NULL AND ecosystem != ''
-		UNION
-		SELECT DISTINCT ecosystem FROM dependency_snapshots WHERE ecosystem IS NOT NULL AND ecosystem != ''
+		SELECT ecosystem, COUNT(*) FROM dependency_snapshots
+		WHERE ecosystem IS NOT NULL AND ecosystem != ''
+		GROUP BY ecosystem
+		ORDER BY ecosystem
 	`)
 	if err == nil {
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var eco string
-			if rows.Scan(&eco) == nil && eco != "" {
-				info.Ecosystems = append(info.Ecosystems, eco)
+			var count int
+			if rows.Scan(&eco, &count) == nil && eco != "" {
+				info.Ecosystems = append(info.Ecosystems, EcosystemCount{Name: eco, Count: count})
 			}
 		}
 	}
