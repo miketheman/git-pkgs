@@ -20,6 +20,8 @@ var (
 	Color ColorOutput
 	// UsePager enables pager for long output
 	UsePager bool
+	// pagerCleanup holds the cleanup function for the active pager
+	pagerCleanup func()
 )
 
 // Color codes for terminal output
@@ -123,6 +125,23 @@ func Bold(text string) string {
 // Dim returns text in dim/faded style
 func Dim(text string) string {
 	return Colorize(text, colorDim)
+}
+
+// SetupOutput configures colour and pager for a command
+func SetupOutput(cmd *cobra.Command) {
+	c, _ := cmd.Flags().GetString("color")
+	Color = parseColor(c)
+	UsePager, _ = cmd.Flags().GetBool("pager")
+	cleanup := SetupPager(cmd)
+	pagerCleanup = cleanup
+}
+
+// CleanupOutput tears down the pager if one is active
+func CleanupOutput() {
+	if pagerCleanup != nil {
+		pagerCleanup()
+		pagerCleanup = nil
+	}
 }
 
 // GetPager returns the pager command to use

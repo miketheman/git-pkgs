@@ -26,8 +26,9 @@ func NewRootCmd() *cobra.Command {
 		Version:          versionStr,
 		Short:            shortDesc,
 		Long:             longDesc,
-		SilenceUsage:     true,
-		PersistentPreRun: preRun,
+		SilenceUsage:      true,
+		PersistentPreRun:  preRun,
+		PersistentPostRun: postRun,
 	}
 	addPersistentFlags(cmd)
 
@@ -73,9 +74,11 @@ func NewRootCmd() *cobra.Command {
 }
 
 func preRun(cmd *cobra.Command, args []string) {
-	c, _ := cmd.Flags().GetString("color")
-	Color = parseColor(c)
-	UsePager, _ = cmd.Flags().GetBool("pager")
+	SetupOutput(cmd)
+}
+
+func postRun(cmd *cobra.Command, args []string) {
+	CleanupOutput()
 }
 
 func addPersistentFlags(cmd *cobra.Command) {

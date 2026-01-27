@@ -29,9 +29,6 @@ Changes are shown in chronological order.`,
 }
 
 func runHistory(cmd *cobra.Command, args []string) error {
-	cleanup := SetupPager(cmd)
-	defer cleanup()
-
 	packageName := ""
 	if len(args) > 0 {
 		packageName = args[0]
