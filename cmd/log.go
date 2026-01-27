@@ -28,9 +28,6 @@ func addLogCmd(parent *cobra.Command) {
 }
 
 func runLog(cmd *cobra.Command, args []string) error {
-	cleanup := SetupPager(cmd)
-	defer cleanup()
-
 	ecosystem, _ := cmd.Flags().GetString("ecosystem")
 	author, _ := cmd.Flags().GetString("author")
 	since, _ := cmd.Flags().GetString("since")
