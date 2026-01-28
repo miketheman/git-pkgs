@@ -147,12 +147,10 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 	var queries []osv.QueryRequest
 	var queryKeys []pkgKey
 	for key := range uniquePkgs {
-		// Check if we need to sync (unless force)
+		// Check if recently synced (unless force)
 		if !force {
-			count, _ := db.GetStoredVulnCount(key.ecosystem, key.name)
-			if count >= 0 {
-				// Already synced, skip unless force
-				// Note: count=0 means synced with no vulns, which is valid
+			syncedAt, _ := db.GetVulnsSyncedAt(key.ecosystem, key.name)
+			if !syncedAt.IsZero() && time.Since(syncedAt) < 24*time.Hour {
 				continue
 			}
 		}
@@ -257,6 +255,11 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 			}
 
 			totalVulns++
+		}
+
+		// Mark as synced so we don't re-query within 24 hours
+		if err := db.SetVulnsSyncedAt(key.ecosystem, key.name); err != nil {
+			return fmt.Errorf("recording sync time for %s/%s: %w", key.ecosystem, key.name, err)
 		}
 	}
 
