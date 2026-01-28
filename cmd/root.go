@@ -27,9 +27,13 @@ func init() {
 			}
 		}
 	}
-	versionStr = version +
-		"\n          commit " + commit +
-		"\n            date " + date
+	versionStr = version
+	if commit != "unknown" {
+		versionStr += "\n          commit " + commit
+	}
+	if date != "unknown" {
+		versionStr += "\n            date " + date
+	}
 }
 
 const shortDesc = "Track package dependencies across git history"
