@@ -767,11 +767,23 @@ func (db *DB) GetStats(opts StatsOptions) (*Stats, error) {
 		return nil, err
 	}
 
-	// Current deps count and by ecosystem - use pre-computed latest commit_id
+	// Current deps count and by ecosystem - find the latest snapshot commit
+	// (which may differ from the latest commit if recent commits had no dep changes)
+	var snapshotCommitID sql.NullInt64
 	if latestCommitID.Valid {
+		_ = db.QueryRow(`
+			SELECT ds.commit_id
+			FROM dependency_snapshots ds
+			JOIN branch_commits bc ON bc.commit_id = ds.commit_id
+			WHERE bc.branch_id = ?
+			ORDER BY bc.position DESC
+			LIMIT 1
+		`, opts.BranchID).Scan(&snapshotCommitID)
+	}
+	if snapshotCommitID.Valid {
 		err = db.QueryRow(`
 			SELECT COUNT(*) FROM dependency_snapshots WHERE commit_id = ?
-		`, latestCommitID.Int64).Scan(&stats.CurrentDeps)
+		`, snapshotCommitID.Int64).Scan(&stats.CurrentDeps)
 		if err != nil {
 			return nil, err
 		}
@@ -782,7 +794,7 @@ func (db *DB) GetStats(opts StatsOptions) (*Stats, error) {
 			FROM dependency_snapshots
 			WHERE commit_id = ?
 			GROUP BY ecosystem
-		`, latestCommitID.Int64)
+		`, snapshotCommitID.Int64)
 		if err != nil {
 			return nil, err
 		}

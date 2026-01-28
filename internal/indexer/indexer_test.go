@@ -589,6 +589,48 @@ func TestNpmMultipleVersionsSurviveModifiedLockfile(t *testing.T) {
 	}
 }
 
+func TestStatsCurrentDepsNonZeroWhenLastCommitHasNoChanges(t *testing.T) {
+	repoDir := createTestRepo(t)
+
+	// Commit 1: add Gemfile (has dependency changes)
+	addFileAndCommit(t, repoDir, "Gemfile", "source \"https://rubygems.org\"\ngem \"rails\", \"~> 7.0\"\ngem \"puma\"\n", "Add Gemfile")
+
+	// Commit 2: non-manifest change (no dependency changes)
+	addFileAndCommit(t, repoDir, "README.md", "# Hello", "Add readme")
+
+	repo, err := gitpkg.OpenRepository(repoDir)
+	if err != nil {
+		t.Fatalf("failed to open repo: %v", err)
+	}
+
+	dbPath := filepath.Join(repoDir, ".git", "pkgs.sqlite3")
+	db, err := database.Create(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	idx := indexer.New(repo, db, indexer.Options{Quiet: true})
+	_, err = idx.Run()
+	if err != nil {
+		t.Fatalf("indexer failed: %v", err)
+	}
+
+	branch, err := db.GetDefaultBranch()
+	if err != nil {
+		t.Fatalf("failed to get branch: %v", err)
+	}
+
+	stats, err := db.GetStats(database.StatsOptions{BranchID: branch.ID})
+	if err != nil {
+		t.Fatalf("GetStats failed: %v", err)
+	}
+
+	if stats.CurrentDeps != 2 {
+		t.Errorf("expected 2 current deps, got %d", stats.CurrentDeps)
+	}
+}
+
 func TestIndexerStoresSnapshots(t *testing.T) {
 	repoDir := createTestRepo(t)
 
