@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"bufio"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -565,6 +566,110 @@ func (a *Analyzer) parseSupplementsInDir(tree *object.Tree, dir string) map[supp
 		}
 		return nil
 	})
+
+	return hashes
+}
+
+func (a *Analyzer) DependenciesInWorkingDir(root string) ([]Change, error) {
+	var deps []Change
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			base := filepath.Base(path)
+			if base == ".git" || base == "node_modules" || base == "vendor" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		_, _, ok := manifests.Identify(filepath.Base(path))
+		if !ok {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil
+		}
+
+		if isSupplementFile(relPath) {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+
+		result, err := manifests.Parse(relPath, content)
+		if err != nil || result == nil {
+			return nil
+		}
+
+		// Look for supplement files in the same directory
+		supHashes := a.parseSupplementsInWorkingDir(filepath.Dir(path), filepath.Dir(relPath))
+
+		for _, dep := range result.Dependencies {
+			integrity := dep.Integrity
+			if integrity == "" {
+				if h, ok := supHashes[supplementKey{dep.Name, dep.Version}]; ok {
+					integrity = h
+				}
+			}
+			deps = append(deps, Change{
+				ManifestPath:   relPath,
+				Ecosystem:      result.Ecosystem,
+				Kind:           string(result.Kind),
+				Name:           dep.Name,
+				PURL:           dep.PURL,
+				Requirement:    dep.Version,
+				DependencyType: string(dep.Scope),
+				Integrity:      integrity,
+			})
+		}
+
+		return nil
+	})
+
+	return deps, err
+}
+
+func (a *Analyzer) parseSupplementsInWorkingDir(absDir, relDir string) map[supplementKey]string {
+	hashes := make(map[supplementKey]string)
+
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return hashes
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		relPath := filepath.Join(relDir, entry.Name())
+		if !isSupplementFile(relPath) {
+			continue
+		}
+
+		content, err := os.ReadFile(filepath.Join(absDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+
+		result, err := manifests.Parse(relPath, content)
+		if err != nil || result == nil {
+			continue
+		}
+
+		for _, dep := range result.Dependencies {
+			if dep.Integrity != "" {
+				hashes[supplementKey{dep.Name, dep.Version}] = dep.Integrity
+			}
+		}
+	}
 
 	return hashes
 }

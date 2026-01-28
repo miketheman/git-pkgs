@@ -357,6 +357,68 @@ func TestDependenciesAtCommit(t *testing.T) {
 	}
 }
 
+func TestDependenciesInWorkingDir(t *testing.T) {
+	repoDir := createTestRepo(t)
+	addFile(t, repoDir, "Gemfile", sampleGemfile(map[string]string{
+		"rails": "~> 7.0",
+		"puma":  "~> 6.0",
+	}))
+	addFile(t, repoDir, "package.json", samplePackageJSON(map[string]string{
+		"lodash": "^4.17.21",
+	}))
+	commit(t, repoDir, "Add manifests")
+
+	a := analyzer.New()
+	deps, err := a.DependenciesInWorkingDir(repoDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(deps) != 3 {
+		t.Errorf("expected 3 dependencies, got %d", len(deps))
+	}
+
+	ecosystems := make(map[string]int)
+	for _, d := range deps {
+		ecosystems[d.Ecosystem]++
+	}
+
+	if ecosystems["gem"] != 2 {
+		t.Errorf("expected 2 gem dependencies, got %d", ecosystems["gem"])
+	}
+
+	if ecosystems["npm"] != 1 {
+		t.Errorf("expected 1 npm dependency, got %d", ecosystems["npm"])
+	}
+}
+
+func TestDependenciesInWorkingDirUncommitted(t *testing.T) {
+	repoDir := createTestRepo(t)
+	addFile(t, repoDir, "README.md", "# Test")
+	commit(t, repoDir, "Initial commit")
+
+	// Write a manifest file without committing
+	if err := os.WriteFile(filepath.Join(repoDir, "Gemfile"), []byte(sampleGemfile(map[string]string{
+		"rails": "~> 7.0",
+	})), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	a := analyzer.New()
+	deps, err := a.DependenciesInWorkingDir(repoDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(deps) != 1 {
+		t.Fatalf("expected 1 dependency, got %d", len(deps))
+	}
+
+	if deps[0].Name != "rails" {
+		t.Errorf("expected rails, got %s", deps[0].Name)
+	}
+}
+
 func TestMultipleVersionsSamePackage(t *testing.T) {
 	// Regression test for https://github.com/git-pkgs/git-pkgs/issues/37
 	// npm can have multiple versions of the same package (e.g., isexe@2.0.0 runtime, isexe@3.1.1 dev)

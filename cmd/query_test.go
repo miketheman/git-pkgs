@@ -3,7 +3,9 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -300,7 +302,66 @@ func TestShowCommand(t *testing.T) {
 	})
 }
 
+func writeFile(t *testing.T, repoDir, path, content string) {
+	t.Helper()
+	fullPath := filepath.Join(repoDir, path)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		t.Fatalf("failed to create directory: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+}
+
 func TestDiffCommand(t *testing.T) {
+	t.Run("no args shows working tree changes", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", `{"dependencies":{"lodash":"^4.17.0"}}`, "Initial deps")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		// Modify the file without committing
+		writeFile(t, repoDir, "package.json", packageJSON)
+
+		var stdout bytes.Buffer
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff", "--stateless"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, "express") {
+			t.Errorf("expected 'express' in diff output, got: %s", output)
+		}
+	})
+
+	t.Run("explicit range still works", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", `{"dependencies":{"lodash":"^4.17.0"}}`, "Initial deps")
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Update deps")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		var stdout bytes.Buffer
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff", "HEAD~1..HEAD", "--stateless"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, "express") {
+			t.Errorf("expected 'express' in diff output, got: %s", output)
+		}
+	})
+
 	t.Run("shows diff between commits", func(t *testing.T) {
 		repoDir := createTestRepo(t)
 		addFileAndCommit(t, repoDir, "package.json", `{"dependencies":{"lodash":"^4.17.0"}}`, "Initial deps")

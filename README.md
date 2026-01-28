@@ -40,8 +40,9 @@ git pkgs blame          # who added each dependency
 git pkgs history        # all dependency changes over time
 git pkgs history rails  # track a specific package
 git pkgs why rails      # why was this added?
+git pkgs diff                 # HEAD vs working tree
 git pkgs diff --from=HEAD~10  # what changed recently?
-git pkgs diff --from=main --to=feature  # compare branches
+git pkgs diff main..feature   # compare branches
 git pkgs vulns          # scan for known CVEs
 git pkgs vulns blame    # who introduced each vulnerability
 git pkgs outdated       # find packages with newer versions
@@ -377,15 +378,16 @@ git pkgs sbom --stateless          # no database needed
 
 Includes package URLs (purls), versions, and licenses (fetched from registries). Use `--skip-enrichment` to omit license lookups.
 
-### Diff between commits
+### Diff between commits or working tree
 
 ```bash
-git pkgs diff --from=abc123 --to=def456
-git pkgs diff --from=HEAD~10
-git pkgs diff main..feature --stateless  # no database needed
+git pkgs diff                             # HEAD vs working tree
+git pkgs diff --from=abc123 --to=def456   # between two commits
+git pkgs diff --from=HEAD~10              # HEAD~10 vs working tree
+git pkgs diff main..feature --stateless   # no database needed
 ```
 
-This shows added, removed, and modified packages with version info.
+With no arguments, compares HEAD against the working tree (like `git diff`). Shows added, removed, and modified packages with version info.
 
 ### Diff between files
 

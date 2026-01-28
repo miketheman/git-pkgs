@@ -14,15 +14,16 @@ import (
 func addDiffCmd(parent *cobra.Command) {
 	diffCmd := &cobra.Command{
 		Use:   "diff [from..to]",
-		Short: "Compare dependencies between two commits",
-		Long: `Compare dependencies between two commits or refs.
+		Short: "Compare dependencies between commits or working tree",
+		Long: `Compare dependencies between two commits, refs, or the working tree.
+With no arguments, compares HEAD against the working tree (like git diff).
 Supports range syntax (main..feature) or explicit --from/--to flags.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runDiff,
 	}
 
-	diffCmd.Flags().String("from", "", "Starting commit (default: HEAD~1)")
-	diffCmd.Flags().String("to", "", "Ending commit (default: HEAD)")
+	diffCmd.Flags().String("from", "", "Starting commit (default: HEAD)")
+	diffCmd.Flags().String("to", "", "Ending commit (default: working tree)")
 	diffCmd.Flags().StringP("ecosystem", "e", "", "Filter by ecosystem")
 	diffCmd.Flags().StringP("format", "f", "text", "Output format: text, json")
 	diffCmd.Flags().Bool("stateless", false, "Parse manifests directly without database")
@@ -63,11 +64,9 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	// Set defaults
 	if fromRef == "" {
-		fromRef = "HEAD~1"
+		fromRef = "HEAD"
 	}
-	if toRef == "" {
-		toRef = "HEAD"
-	}
+	// toRef "" means working tree
 
 	repo, err := git.OpenRepository(".")
 	if err != nil {
@@ -91,7 +90,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(result.Added) == 0 && len(result.Modified) == 0 && len(result.Removed) == 0 {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No dependency changes between these commits.")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No dependency changes.")
 		return nil
 	}
 
@@ -126,21 +125,47 @@ func diffFromDB(repo *git.Repository, fromRef, toRef string) (*DiffResult, error
 	if err != nil {
 		return nil, fmt.Errorf("resolving %q: %w", fromRef, err)
 	}
-	toHash, err := repo.ResolveRevision(toRef)
-	if err != nil {
-		return nil, fmt.Errorf("resolving %q: %w", toRef, err)
-	}
 
 	fromDeps, err := db.GetDependenciesAtRef(fromHash.String(), branchInfo.ID)
 	if err != nil {
 		return nil, fmt.Errorf("getting deps at %s: %w", fromRef, err)
 	}
-	toDeps, err := db.GetDependenciesAtRef(toHash.String(), branchInfo.ID)
-	if err != nil {
-		return nil, fmt.Errorf("getting deps at %s: %w", toRef, err)
+
+	var toDeps []database.Dependency
+	if toRef == "" {
+		// Working tree mode: parse manifests from disk
+		a := analyzer.New()
+		toChanges, err := a.DependenciesInWorkingDir(repo.WorkDir())
+		if err != nil {
+			return nil, fmt.Errorf("reading working tree: %w", err)
+		}
+		toDeps = changesToDeps(toChanges)
+	} else {
+		toHash, err := repo.ResolveRevision(toRef)
+		if err != nil {
+			return nil, fmt.Errorf("resolving %q: %w", toRef, err)
+		}
+		toDeps, err = db.GetDependenciesAtRef(toHash.String(), branchInfo.ID)
+		if err != nil {
+			return nil, fmt.Errorf("getting deps at %s: %w", toRef, err)
+		}
 	}
 
 	return computeDiff(fromDeps, toDeps), nil
+}
+
+func changesToDeps(changes []analyzer.Change) []database.Dependency {
+	var deps []database.Dependency
+	for _, c := range changes {
+		deps = append(deps, database.Dependency{
+			Name:           c.Name,
+			Ecosystem:      c.Ecosystem,
+			Requirement:    c.Requirement,
+			ManifestPath:   c.ManifestPath,
+			DependencyType: c.DependencyType,
+		})
+	}
+	return deps
 }
 
 func diffStateless(repo *git.Repository, fromRef, toRef string) (*DiffResult, error) {
@@ -148,18 +173,10 @@ func diffStateless(repo *git.Repository, fromRef, toRef string) (*DiffResult, er
 	if err != nil {
 		return nil, fmt.Errorf("resolving %q: %w", fromRef, err)
 	}
-	toHash, err := repo.ResolveRevision(toRef)
-	if err != nil {
-		return nil, fmt.Errorf("resolving %q: %w", toRef, err)
-	}
 
 	fromCommit, err := repo.CommitObject(*fromHash)
 	if err != nil {
 		return nil, fmt.Errorf("getting from commit: %w", err)
-	}
-	toCommit, err := repo.CommitObject(*toHash)
-	if err != nil {
-		return nil, fmt.Errorf("getting to commit: %w", err)
 	}
 
 	a := analyzer.New()
@@ -168,33 +185,26 @@ func diffStateless(repo *git.Repository, fromRef, toRef string) (*DiffResult, er
 	if err != nil {
 		return nil, fmt.Errorf("analyzing from commit: %w", err)
 	}
-	toChanges, err := a.DependenciesAtCommit(toCommit)
+
+	var toChanges []analyzer.Change
+	if toRef == "" {
+		toChanges, err = a.DependenciesInWorkingDir(repo.WorkDir())
+	} else {
+		toHash, err := repo.ResolveRevision(toRef)
+		if err != nil {
+			return nil, fmt.Errorf("resolving %q: %w", toRef, err)
+		}
+		toCommit, err := repo.CommitObject(*toHash)
+		if err != nil {
+			return nil, fmt.Errorf("getting to commit: %w", err)
+		}
+		toChanges, err = a.DependenciesAtCommit(toCommit)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("analyzing to commit: %w", err)
+		return nil, fmt.Errorf("analyzing to: %w", err)
 	}
 
-	// Convert to database.Dependency
-	var fromDeps, toDeps []database.Dependency
-	for _, c := range fromChanges {
-		fromDeps = append(fromDeps, database.Dependency{
-			Name:           c.Name,
-			Ecosystem:      c.Ecosystem,
-			Requirement:    c.Requirement,
-			ManifestPath:   c.ManifestPath,
-			DependencyType: c.DependencyType,
-		})
-	}
-	for _, c := range toChanges {
-		toDeps = append(toDeps, database.Dependency{
-			Name:           c.Name,
-			Ecosystem:      c.Ecosystem,
-			Requirement:    c.Requirement,
-			ManifestPath:   c.ManifestPath,
-			DependencyType: c.DependencyType,
-		})
-	}
-
-	return computeDiff(fromDeps, toDeps), nil
+	return computeDiff(changesToDeps(fromChanges), changesToDeps(toChanges)), nil
 }
 
 func computeDiff(fromDeps, toDeps []database.Dependency) *DiffResult {
