@@ -189,6 +189,9 @@ func diffStateless(repo *git.Repository, fromRef, toRef string) (*DiffResult, er
 	var toChanges []analyzer.Change
 	if toRef == "" {
 		toChanges, err = a.DependenciesInWorkingDir(repo.WorkDir())
+		if err != nil {
+			return nil, fmt.Errorf("reading working tree: %w", err)
+		}
 	} else {
 		toHash, err := repo.ResolveRevision(toRef)
 		if err != nil {
@@ -199,9 +202,9 @@ func diffStateless(repo *git.Repository, fromRef, toRef string) (*DiffResult, er
 			return nil, fmt.Errorf("getting to commit: %w", err)
 		}
 		toChanges, err = a.DependenciesAtCommit(toCommit)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("analyzing to: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("analyzing to commit: %w", err)
+		}
 	}
 
 	return computeDiff(changesToDeps(fromChanges), changesToDeps(toChanges)), nil
