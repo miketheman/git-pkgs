@@ -14,7 +14,7 @@ import (
 )
 
 func isSupplementFile(path string) bool {
-	_, kind, ok := manifests.Identify(filepath.Base(path))
+	_, kind, ok := manifests.Identify(path)
 	return ok && kind == manifests.Supplement
 }
 
@@ -133,7 +133,7 @@ func (a *Analyzer) PrefetchDiffs(commits []*object.Commit, numWorkers int) {
 			status := line[0]
 			path := line[2:] // Skip status and tab
 
-			_, _, ok := manifests.Identify(filepath.Base(path))
+			_, _, ok := manifests.Identify(path)
 			if !ok {
 				continue
 			}
@@ -207,7 +207,7 @@ func (a *Analyzer) AnalyzeCommit(commit *object.Commit, previousSnapshot Snapsho
 				path = change.From.Name
 			}
 
-			_, _, ok := manifests.Identify(filepath.Base(path))
+			_, _, ok := manifests.Identify(path)
 			if !ok {
 				continue
 			}
@@ -493,7 +493,7 @@ func (a *Analyzer) DependenciesAtCommit(commit *object.Commit) ([]Change, error)
 	var deps []Change
 
 	err = tree.Files().ForEach(func(f *object.File) error {
-		_, _, ok := manifests.Identify(filepath.Base(f.Name))
+		_, _, ok := manifests.Identify(f.Name)
 		if !ok {
 			return nil
 		}
