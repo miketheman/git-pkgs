@@ -1,15 +1,36 @@
 package cmd
 
 import (
+	"runtime/debug"
+
 	"github.com/spf13/cobra"
 )
 
 var version = "unknown"
 var commit = "unknown"
 var date = "unknown"
-var versionStr = version +
-	"\n          commit " + commit +
-	"\n            date " + date
+var versionStr string
+
+func init() {
+	if version == "unknown" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			if info.Main.Version != "" && info.Main.Version != "(devel)" {
+				version = info.Main.Version
+			}
+			for _, s := range info.Settings {
+				switch s.Key {
+				case "vcs.revision":
+					commit = s.Value
+				case "vcs.time":
+					date = s.Value
+				}
+			}
+		}
+	}
+	versionStr = version +
+		"\n          commit " + commit +
+		"\n            date " + date
+}
 
 const shortDesc = "Track package dependencies across git history"
 const longDesc = `git-pkgs indexes package dependencies from manifest files across your git history,
