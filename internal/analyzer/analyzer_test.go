@@ -419,6 +419,96 @@ func TestDependenciesInWorkingDirUncommitted(t *testing.T) {
 	}
 }
 
+func TestAnalyzeCommitWithGitHubActionsWorkflow(t *testing.T) {
+	repoDir := createTestRepo(t)
+	addFile(t, repoDir, "README.md", "# Test")
+	commit(t, repoDir, "Initial commit")
+
+	workflow := `name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+`
+	addFile(t, repoDir, ".github/workflows/ci.yml", workflow)
+	sha := commit(t, repoDir, "Add CI workflow")
+
+	repo := openRepo(t, repoDir)
+	hash := getCommit(t, repo, sha)
+	c, _ := repo.CommitObject(*hash)
+
+	a := analyzer.New()
+	result, err := a.AnalyzeCommit(c, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("expected non-nil result for commit with GitHub Actions workflow")
+		return
+	}
+
+	if len(result.Changes) != 2 {
+		t.Fatalf("expected 2 changes (checkout and setup-node), got %d", len(result.Changes))
+	}
+
+	names := make(map[string]bool)
+	for _, ch := range result.Changes {
+		names[ch.Name] = true
+		if ch.Ecosystem != "github-actions" {
+			t.Errorf("expected ecosystem 'github-actions', got %s", ch.Ecosystem)
+		}
+	}
+
+	if !names["actions/checkout"] {
+		t.Error("expected actions/checkout in changes")
+	}
+	if !names["actions/setup-node"] {
+		t.Error("expected actions/setup-node in changes")
+	}
+}
+
+func TestDependenciesAtCommitWithGitHubActions(t *testing.T) {
+	repoDir := createTestRepo(t)
+
+	workflow := `name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+`
+	addFile(t, repoDir, ".github/workflows/ci.yml", workflow)
+	addFile(t, repoDir, "Gemfile", sampleGemfile(map[string]string{"rails": "~> 7.0"}))
+	sha := commit(t, repoDir, "Add workflow and Gemfile")
+
+	repo := openRepo(t, repoDir)
+	hash := getCommit(t, repo, sha)
+	c, _ := repo.CommitObject(*hash)
+
+	a := analyzer.New()
+	deps, err := a.DependenciesAtCommit(c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ecosystems := make(map[string]int)
+	for _, d := range deps {
+		ecosystems[d.Ecosystem]++
+	}
+
+	if ecosystems["github-actions"] != 1 {
+		t.Errorf("expected 1 github-actions dependency, got %d", ecosystems["github-actions"])
+	}
+	if ecosystems["gem"] != 1 {
+		t.Errorf("expected 1 gem dependency, got %d", ecosystems["gem"])
+	}
+}
+
 func TestMultipleVersionsSamePackage(t *testing.T) {
 	// Regression test for https://github.com/git-pkgs/git-pkgs/issues/37
 	// npm can have multiple versions of the same package (e.g., isexe@2.0.0 runtime, isexe@3.1.1 dev)
