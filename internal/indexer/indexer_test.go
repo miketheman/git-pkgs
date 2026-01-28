@@ -2,9 +2,11 @@ package indexer_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/git-pkgs/git-pkgs/internal/database"
@@ -56,6 +58,16 @@ func addFileAndCommit(t *testing.T, repoDir, path, content, message string) {
 	gitCmd.Dir = repoDir
 	if err := gitCmd.Run(); err != nil {
 		t.Fatalf("failed to commit: %v", err)
+	}
+}
+
+func gitRun(t *testing.T, repoDir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
 }
 
@@ -289,6 +301,291 @@ func TestIndexerWithBranchOption(t *testing.T) {
 	}
 	if branchName != "main" {
 		t.Errorf("expected branch 'main', got %q", branchName)
+	}
+}
+
+func sampleGemfileLock(gems map[string]string) string {
+	// Sort gem names for deterministic output
+	var names []string
+	for name := range gems {
+		names = append(names, name)
+	}
+	for i := 0; i < len(names); i++ {
+		for j := i + 1; j < len(names); j++ {
+			if names[i] > names[j] {
+				names[i], names[j] = names[j], names[i]
+			}
+		}
+	}
+
+	lines := []string{
+		"GEM",
+		"  remote: https://rubygems.org/",
+		"  specs:",
+	}
+	for _, name := range names {
+		lines = append(lines, "    "+name+" ("+gems[name]+")")
+	}
+	lines = append(lines, "", "PLATFORMS", "  ruby", "", "DEPENDENCIES")
+	for _, name := range names {
+		lines = append(lines, "  "+name)
+	}
+	lines = append(lines, "", "BUNDLED WITH", "   2.5.0", "")
+	return strings.Join(lines, "\n")
+}
+
+func TestSnapshotNoDuplicateVersions(t *testing.T) {
+	repoDir := createTestRepo(t)
+
+	// Commit 1: initial lockfile
+	lock1 := sampleGemfileLock(map[string]string{
+		"actioncable": "7.0.4",
+		"rails":       "7.0.4",
+		"puma":        "6.0.0",
+	})
+	addFileAndCommit(t, repoDir, "Gemfile.lock", lock1, "Add lockfile")
+
+	// Commit 2: update actioncable and rails
+	lock2 := sampleGemfileLock(map[string]string{
+		"actioncable": "7.1.0",
+		"rails":       "7.1.0",
+		"puma":        "6.0.0",
+	})
+	addFileAndCommit(t, repoDir, "Gemfile.lock", lock2, "Update rails")
+
+	// Commit 3: another update
+	lock3 := sampleGemfileLock(map[string]string{
+		"actioncable": "7.2.0",
+		"rails":       "7.2.0",
+		"puma":        "6.0.0",
+	})
+	addFileAndCommit(t, repoDir, "Gemfile.lock", lock3, "Update rails again")
+
+	repo, err := gitpkg.OpenRepository(repoDir)
+	if err != nil {
+		t.Fatalf("failed to open repo: %v", err)
+	}
+
+	dbPath := filepath.Join(repoDir, ".git", "pkgs.sqlite3")
+	db, err := database.Create(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	idx := indexer.New(repo, db, indexer.Options{Quiet: true})
+	_, err = idx.Run()
+	if err != nil {
+		t.Fatalf("indexer failed: %v", err)
+	}
+
+	branch, err := db.GetDefaultBranch()
+	if err != nil {
+		t.Fatalf("failed to get branch: %v", err)
+	}
+
+	deps, err := db.GetLatestDependencies(branch.ID)
+	if err != nil {
+		t.Fatalf("failed to get latest deps: %v", err)
+	}
+
+	// Count occurrences of each package name
+	nameCounts := make(map[string][]string)
+	for _, d := range deps {
+		nameCounts[d.Name] = append(nameCounts[d.Name], d.Requirement)
+	}
+
+	for name, versions := range nameCounts {
+		if len(versions) > 1 {
+			t.Errorf("package %s appears %d times with versions %v, expected exactly 1",
+				name, len(versions), versions)
+		}
+	}
+
+	// Should have exactly 3 deps
+	if len(deps) != 3 {
+		t.Errorf("expected 3 dependencies, got %d", len(deps))
+	}
+}
+
+func TestSnapshotNoDuplicatesAfterMerge(t *testing.T) {
+	repoDir := createTestRepo(t)
+
+	// Commit 1: initial lockfile on main
+	lock1 := sampleGemfileLock(map[string]string{
+		"actioncable": "5.0.1",
+		"rails":       "5.0.1",
+		"puma":        "3.0.0",
+	})
+	addFileAndCommit(t, repoDir, "Gemfile.lock", lock1, "Add lockfile")
+
+	// Create a feature branch and update the lockfile there
+	gitRun(t, repoDir, "checkout", "-b", "feature")
+	lock2 := sampleGemfileLock(map[string]string{
+		"actioncable": "5.0.2",
+		"rails":       "5.0.2",
+		"puma":        "3.0.0",
+	})
+	addFileAndCommit(t, repoDir, "Gemfile.lock", lock2, "Update rails on feature")
+
+	// Go back to main and merge (creates a merge commit)
+	gitRun(t, repoDir, "checkout", "main")
+	gitRun(t, repoDir, "merge", "--no-ff", "feature", "-m", "Merge feature")
+
+	// Now make another change on main (this will diff against the merge commit)
+	lock3 := sampleGemfileLock(map[string]string{
+		"actioncable": "5.1.0",
+		"rails":       "5.1.0",
+		"puma":        "3.0.0",
+	})
+	addFileAndCommit(t, repoDir, "Gemfile.lock", lock3, "Update to 5.1")
+
+	repo, err := gitpkg.OpenRepository(repoDir)
+	if err != nil {
+		t.Fatalf("failed to open repo: %v", err)
+	}
+
+	dbPath := filepath.Join(repoDir, ".git", "pkgs.sqlite3")
+	db, err := database.Create(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	idx := indexer.New(repo, db, indexer.Options{Quiet: true})
+	_, err = idx.Run()
+	if err != nil {
+		t.Fatalf("indexer failed: %v", err)
+	}
+
+	branch, err := db.GetDefaultBranch()
+	if err != nil {
+		t.Fatalf("failed to get branch: %v", err)
+	}
+
+	deps, err := db.GetLatestDependencies(branch.ID)
+	if err != nil {
+		t.Fatalf("GetLatestDependencies failed: %v", err)
+	}
+
+	// Each package should appear exactly once (this is a Gemfile.lock)
+	nameCounts := make(map[string][]string)
+	for _, d := range deps {
+		nameCounts[d.Name] = append(nameCounts[d.Name], d.Requirement)
+	}
+
+	for name, versions := range nameCounts {
+		if len(versions) > 1 {
+			t.Errorf("package %s appears %d times with versions %v, want 1",
+				name, len(versions), versions)
+		}
+	}
+
+	if len(deps) != 3 {
+		t.Errorf("expected 3 dependencies, got %d", len(deps))
+		for _, d := range deps {
+			t.Logf("  %s %s", d.Name, d.Requirement)
+		}
+	}
+}
+
+func samplePackageLockJSON(deps map[string]string) string {
+	var sb strings.Builder
+	sb.WriteString("{\n  \"name\": \"test\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n")
+	sb.WriteString("    \"\": {\n      \"name\": \"test\",\n      \"version\": \"1.0.0\"\n    }")
+	for path, version := range deps {
+		sb.WriteString(fmt.Sprintf(",\n    \"node_modules/%s\": {\n      \"version\": \"%s\"\n    }", path, version))
+	}
+	sb.WriteString("\n  }\n}\n")
+	return sb.String()
+}
+
+func TestNpmMultipleVersionsSurviveModifiedLockfile(t *testing.T) {
+	repoDir := createTestRepo(t)
+
+	// npm can legitimately have multiple versions of the same package
+	// in a single lockfile (nested node_modules). Verify these survive
+	// when the lockfile is modified across a merge commit.
+	lock1 := samplePackageLockJSON(map[string]string{
+		"isexe":                      "3.1.1",
+		"some-pkg/node_modules/isexe": "2.0.0",
+		"lodash":                     "4.17.21",
+	})
+	addFileAndCommit(t, repoDir, "package-lock.json", lock1, "Add lockfile")
+
+	// Feature branch: update lodash
+	gitRun(t, repoDir, "checkout", "-b", "feature")
+	lock2 := samplePackageLockJSON(map[string]string{
+		"isexe":                      "3.1.1",
+		"some-pkg/node_modules/isexe": "2.0.0",
+		"lodash":                     "4.17.22",
+	})
+	addFileAndCommit(t, repoDir, "package-lock.json", lock2, "Update lodash")
+
+	// Merge back to main
+	gitRun(t, repoDir, "checkout", "main")
+	gitRun(t, repoDir, "merge", "--no-ff", "feature", "-m", "Merge feature")
+
+	// Another change on main
+	lock3 := samplePackageLockJSON(map[string]string{
+		"isexe":                      "3.1.1",
+		"some-pkg/node_modules/isexe": "2.0.0",
+		"lodash":                     "4.17.23",
+	})
+	addFileAndCommit(t, repoDir, "package-lock.json", lock3, "Update lodash again")
+
+	repo, err := gitpkg.OpenRepository(repoDir)
+	if err != nil {
+		t.Fatalf("failed to open repo: %v", err)
+	}
+
+	dbPath := filepath.Join(repoDir, ".git", "pkgs.sqlite3")
+	db, err := database.Create(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	idx := indexer.New(repo, db, indexer.Options{Quiet: true})
+	_, err = idx.Run()
+	if err != nil {
+		t.Fatalf("indexer failed: %v", err)
+	}
+
+	branch, err := db.GetDefaultBranch()
+	if err != nil {
+		t.Fatalf("failed to get branch: %v", err)
+	}
+
+	deps, err := db.GetLatestDependencies(branch.ID)
+	if err != nil {
+		t.Fatalf("GetLatestDependencies failed: %v", err)
+	}
+
+	// Count isexe versions -- should still have both 3.1.1 and 2.0.0
+	var isexeVersions []string
+	for _, d := range deps {
+		if d.Name == "isexe" {
+			isexeVersions = append(isexeVersions, d.Requirement)
+		}
+	}
+
+	if len(isexeVersions) != 2 {
+		t.Errorf("expected 2 isexe versions (npm multi-version), got %d: %v",
+			len(isexeVersions), isexeVersions)
+	}
+
+	// lodash should appear exactly once
+	var lodashVersions []string
+	for _, d := range deps {
+		if d.Name == "lodash" {
+			lodashVersions = append(lodashVersions, d.Requirement)
+		}
+	}
+
+	if len(lodashVersions) != 1 {
+		t.Errorf("expected 1 lodash version, got %d: %v",
+			len(lodashVersions), lodashVersions)
 	}
 }
 

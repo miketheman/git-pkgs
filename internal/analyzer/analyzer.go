@@ -309,6 +309,15 @@ func (a *Analyzer) AnalyzeCommit(commit *object.Commit, previousSnapshot Snapsho
 			afterByNameVersion[dep.Name+"\x00"+dep.Version] = true
 		}
 
+		// Remove all existing snapshot entries for this manifest before re-adding.
+		// This handles stale entries that can accumulate when merge commits
+		// (which are skipped) change the lockfile between snapshots.
+		for key := range result.Snapshot {
+			if key.ManifestPath == path {
+				delete(result.Snapshot, key)
+			}
+		}
+
 		// Process all dependencies in after, storing each unique name+version
 		seen := make(map[string]bool)
 		for _, dep := range afterDeps.Dependencies {
