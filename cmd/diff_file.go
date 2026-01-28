@@ -51,6 +51,9 @@ func parseFile(filename, defaultFilename string) ([]database.Dependency, error) 
 	if err != nil {
 		return nil, err
 	}
+	if len(data) == 0 {
+		return []database.Dependency{}, nil
+	}
 
 	name := filepath.Base(cmp.Or(defaultFilename, filename))
 	result, err := manifests.Parse(name, data)
