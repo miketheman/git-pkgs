@@ -1553,6 +1553,40 @@ func (db *DB) GetStoredVulnCount(ecosystem, packageName string) (int, error) {
 	return count, err
 }
 
+// GetVulnsSyncedAt returns when vulnerabilities were last synced for a package.
+// Returns the zero time if never synced.
+func (db *DB) GetVulnsSyncedAt(ecosystem, name string) (time.Time, error) {
+	var syncedAt sql.NullString
+	err := db.QueryRow(`
+		SELECT vulns_synced_at FROM packages
+		WHERE ecosystem = ? AND name = ?
+		LIMIT 1
+	`, ecosystem, name).Scan(&syncedAt)
+	if err == sql.ErrNoRows || !syncedAt.Valid {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+	t, _ := time.Parse(time.RFC3339, syncedAt.String)
+	return t, nil
+}
+
+// SetVulnsSyncedAt records that vulnerabilities were synced for a package.
+// Creates a basic package record if one doesn't exist.
+func (db *DB) SetVulnsSyncedAt(ecosystem, name string) error {
+	now := time.Now().Format(time.RFC3339)
+	purl := "pkg:" + strings.ToLower(ecosystem) + "/" + name
+	_, err := db.Exec(`
+		INSERT INTO packages (purl, ecosystem, name, vulns_synced_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(purl) DO UPDATE SET
+			vulns_synced_at = excluded.vulns_synced_at,
+			updated_at = excluded.updated_at
+	`, purl, ecosystem, name, now, now, now)
+	return err
+}
+
 // InsertVulnerability inserts or updates a vulnerability record.
 func (db *DB) InsertVulnerability(v Vulnerability) error {
 	aliases := joinCommaList(v.Aliases)
