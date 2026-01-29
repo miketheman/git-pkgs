@@ -69,6 +69,8 @@ func runWhere(cmd *cobra.Command, args []string) error {
 
 		// Get relative path for manifest identification
 		relPath, _ := filepath.Rel(workDir, path)
+		// Normalize to forward slashes for cross-platform consistency
+		relPath = filepath.ToSlash(relPath)
 
 		// Check if this is a manifest file
 		eco, _, ok := manifests.Identify(relPath)
