@@ -598,6 +598,8 @@ func (a *Analyzer) DependenciesInWorkingDir(root string) ([]Change, error) {
 		if err != nil {
 			return nil
 		}
+		// Normalize to forward slashes for cross-platform consistency with git paths
+		relPath = filepath.ToSlash(relPath)
 
 		_, _, ok := manifests.Identify(relPath)
 		if !ok {
