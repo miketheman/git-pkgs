@@ -200,8 +200,13 @@ func SetupPager(cmd *cobra.Command) func() {
 
 	if err := pager.Start(); err != nil {
 		os.Stdout = oldStdout
+		_ = r.Close()
+		_ = w.Close()
 		return func() {}
 	}
+
+	// Parent doesn't need read end; child has its own copy
+	_ = r.Close()
 
 	return func() {
 		_ = w.Close()
