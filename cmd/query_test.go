@@ -314,6 +314,102 @@ func writeFile(t *testing.T, repoDir, path, content string) {
 }
 
 func TestDiffCommand(t *testing.T) {
+	t.Run("clean working tree shows no changes", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add deps")
+		addFileAndCommit(t, repoDir, "package-lock.json", packageLockJSON, "Add lockfile")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		// Initialize database
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"init"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		// Run diff with no args (HEAD vs working tree) - working tree is clean
+		var stdout bytes.Buffer
+		rootCmd = cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, "No dependency changes") {
+			t.Errorf("expected 'No dependency changes' for clean working tree, got: %s", output)
+		}
+	})
+
+	t.Run("clean working tree shows no changes stateless", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add deps")
+		addFileAndCommit(t, repoDir, "package-lock.json", packageLockJSON, "Add lockfile")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		// Run diff with no args (HEAD vs working tree) - working tree is clean
+		var stdout bytes.Buffer
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff", "--stateless"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff --stateless failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, "No dependency changes") {
+			t.Errorf("expected 'No dependency changes' for clean working tree, got: %s", output)
+		}
+	})
+
+	t.Run("clean working tree with github actions shows no changes", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+
+		workflow := `name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+`
+		addFileAndCommit(t, repoDir, ".github/workflows/ci.yml", workflow, "Add workflow")
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add deps")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		// Initialize database
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"init"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		// Run diff with no args - working tree is clean
+		var stdout bytes.Buffer
+		rootCmd = cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, "No dependency changes") {
+			t.Errorf("expected 'No dependency changes' for clean working tree with actions, got: %s", output)
+		}
+	})
+
 	t.Run("no args shows working tree changes", func(t *testing.T) {
 		repoDir := createTestRepo(t)
 		addFileAndCommit(t, repoDir, "package.json", `{"dependencies":{"lodash":"^4.17.0"}}`, "Initial deps")

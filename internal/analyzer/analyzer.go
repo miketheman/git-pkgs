@@ -594,13 +594,13 @@ func (a *Analyzer) DependenciesInWorkingDir(root string) ([]Change, error) {
 			return nil
 		}
 
-		_, _, ok := manifests.Identify(filepath.Base(path))
-		if !ok {
+		relPath, err := filepath.Rel(root, path)
+		if err != nil {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(root, path)
-		if err != nil {
+		_, _, ok := manifests.Identify(relPath)
+		if !ok {
 			return nil
 		}
 
