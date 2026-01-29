@@ -67,8 +67,13 @@ func runWhere(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
+		// Get relative path for manifest identification
+		relPath, _ := filepath.Rel(workDir, path)
+		// Normalize to forward slashes for cross-platform consistency
+		relPath = filepath.ToSlash(relPath)
+
 		// Check if this is a manifest file
-		eco, _, ok := manifests.Identify(info.Name())
+		eco, _, ok := manifests.Identify(relPath)
 		if !ok {
 			return nil
 		}
@@ -77,9 +82,6 @@ func runWhere(cmd *cobra.Command, args []string) error {
 		if ecosystem != "" && !strings.EqualFold(eco, ecosystem) {
 			return nil
 		}
-
-		// Read and search the file
-		relPath, _ := filepath.Rel(workDir, path)
 		fileMatches, err := searchFileForPackage(path, relPath, packageName, eco, context)
 		if err != nil {
 			return nil // Skip files we can't read
