@@ -625,6 +625,174 @@ func TestWhereCommand(t *testing.T) {
 	})
 }
 
+func TestWhereCommandWithWorkflows(t *testing.T) {
+	t.Run("finds actions in github workflow files", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+
+		workflow := `name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+`
+		addFileAndCommit(t, repoDir, ".github/workflows/ci.yml", workflow, "Add workflow")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		var stdout bytes.Buffer
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"where", "actions/checkout"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("where failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, ".github/workflows/ci.yml") {
+			t.Errorf("expected to find .github/workflows/ci.yml in where output, got: %s", output)
+		}
+	})
+}
+
+func TestDiffFileCommand(t *testing.T) {
+	t.Run("compares two package files", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		// Create two files to compare
+		writeFile(t, repoDir, "old.json", `{"dependencies":{"lodash":"^4.17.0"}}`)
+		writeFile(t, repoDir, "new.json", `{"dependencies":{"lodash":"^4.17.21","express":"^4.18.0"}}`)
+
+		var stdout bytes.Buffer
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff-file", "old.json", "new.json", "--filename", "package.json"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff-file failed: %v", err)
+		}
+
+		output := stdout.String()
+		if !strings.Contains(output, "express") {
+			t.Errorf("expected 'express' in diff output, got: %s", output)
+		}
+	})
+
+	t.Run("compares workflow files with filename flag", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		oldWorkflow := `name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+`
+		newWorkflow := `name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+`
+		writeFile(t, repoDir, "old.yml", oldWorkflow)
+		writeFile(t, repoDir, "new.yml", newWorkflow)
+
+		var stdout bytes.Buffer
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff-file", "old.yml", "new.yml", "--filename", ".github/workflows/ci.yml"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff-file failed: %v", err)
+		}
+
+		output := stdout.String()
+		// Should detect actions/setup-node as added
+		if !strings.Contains(output, "actions/setup-node") {
+			t.Errorf("expected 'actions/setup-node' in diff output, got: %s", output)
+		}
+	})
+}
+
+func TestDiffDriverCommand(t *testing.T) {
+	t.Run("converts lockfile to sorted list", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		writeFile(t, repoDir, "package-lock.json", packageLockJSON)
+
+		var stdout bytes.Buffer
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff-driver", "package-lock.json"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff-driver failed: %v", err)
+		}
+
+		output := stdout.String()
+		// Should show sorted dependency list
+		if !strings.Contains(output, "express") {
+			t.Errorf("expected 'express' in diff-driver output, got: %s", output)
+		}
+	})
+
+	t.Run("converts workflow file when path indicates workflow", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		workflow := `name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+`
+		// Create the file in the workflow directory to test path-based identification
+		writeFile(t, repoDir, ".github/workflows/ci.yml", workflow)
+
+		var stdout bytes.Buffer
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"diff-driver", ".github/workflows/ci.yml"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("diff-driver failed: %v", err)
+		}
+
+		output := stdout.String()
+		// Should show sorted action list (parsed format, not raw YAML)
+		// If parsing works, output should be "actions/checkout v4\nactions/setup-node v4\n"
+		// If parsing fails and falls back to raw, output would contain "name: CI", "jobs:", etc.
+		if strings.Contains(output, "name: CI") || strings.Contains(output, "jobs:") {
+			t.Errorf("diff-driver fell back to raw output instead of parsing workflow, got: %s", output)
+		}
+		if !strings.Contains(output, "actions/checkout") {
+			t.Errorf("expected 'actions/checkout' in diff-driver output, got: %s", output)
+		}
+	})
+}
+
 func TestStaleCommand(t *testing.T) {
 	t.Run("finds stale dependencies", func(t *testing.T) {
 		repoDir := createTestRepo(t)

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"cmp"
 	"os"
 	"path/filepath"
 
@@ -55,7 +54,12 @@ func parseFile(filename, defaultFilename string) ([]database.Dependency, error) 
 		return []database.Dependency{}, nil
 	}
 
-	name := filepath.Base(cmp.Or(defaultFilename, filename))
+	// Use defaultFilename as-is if provided (preserves path for manifest identification)
+	// Otherwise use base name of the actual file
+	name := defaultFilename
+	if name == "" {
+		name = filepath.Base(filename)
+	}
 	result, err := manifests.Parse(name, data)
 	if err != nil {
 		return nil, err

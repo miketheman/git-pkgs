@@ -188,7 +188,8 @@ func convertLockfile(cmd *cobra.Command, filePath string) error {
 	}
 
 	// Try to parse with manifests library
-	result, err := manifests.Parse(filepath.Base(filePath), content)
+	// Use filePath as-is to preserve path info for manifest identification (e.g., .github/workflows/)
+	result, err := manifests.Parse(filePath, content)
 	if err != nil || result == nil || len(result.Dependencies) == 0 {
 		// Fall back to just outputting the file as-is
 		_, _ = cmd.OutOrStdout().Write(content)
