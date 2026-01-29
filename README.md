@@ -632,7 +632,7 @@ Commands that run package managers (`install`, `add`, `remove`, `update`) delega
 
 git-pkgs uses [github.com/git-pkgs/manifests](https://github.com/git-pkgs/manifests) for parsing, supporting:
 
-Actions, Cargo, CocoaPods, Composer, Go, Hex, Maven, npm, NuGet, Pub, PyPI, RubyGems, and more.
+Actions, Bazel, Cargo, CocoaPods, Composer, Go, Hex, Maven, npm, NuGet, Pub, PyPI, RubyGems, and more.
 
 ## Contributing
 

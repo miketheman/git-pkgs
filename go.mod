@@ -5,11 +5,11 @@ go 1.25.6
 require (
 	github.com/ecosyste-ms/ecosystems-go v0.0.0-20260115154313-d5f3879b6ec0
 	github.com/git-pkgs/managers v0.4.0
-	github.com/git-pkgs/manifests v0.2.0
-	github.com/git-pkgs/purl v0.1.2
-	github.com/git-pkgs/registries v0.2.2
+	github.com/git-pkgs/manifests v0.3.0
+	github.com/git-pkgs/purl v0.1.3
+	github.com/git-pkgs/registries v0.2.3
 	github.com/git-pkgs/spdx v0.1.0
-	github.com/git-pkgs/vers v0.2.0
+	github.com/git-pkgs/vers v0.2.1
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/mattn/go-isatty v0.0.20
 	github.com/package-url/packageurl-go v0.1.3
@@ -23,6 +23,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
+	github.com/bazelbuild/buildtools v0.0.0-20260121081817-bbf01ec6cb49 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
