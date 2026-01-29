@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/git-pkgs/git-pkgs/internal/analyzer"
@@ -260,7 +261,21 @@ func computeDiff(fromDeps, toDeps []database.Dependency) *DiffResult {
 		}
 	}
 
+	// Sort results for deterministic output
+	sortDiffEntries(result.Added)
+	sortDiffEntries(result.Modified)
+	sortDiffEntries(result.Removed)
+
 	return result
+}
+
+func sortDiffEntries(entries []DiffEntry) {
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].ManifestPath != entries[j].ManifestPath {
+			return entries[i].ManifestPath < entries[j].ManifestPath
+		}
+		return entries[i].Name < entries[j].Name
+	})
 }
 
 func filterDiffResult(result *DiffResult, ecosystem string) *DiffResult {
