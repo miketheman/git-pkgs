@@ -1,6 +1,6 @@
 module github.com/git-pkgs/git-pkgs
 
-go 1.25.5
+go 1.25.6
 
 require (
 	github.com/ecosyste-ms/ecosystems-go v0.0.0-20260115154313-d5f3879b6ec0
