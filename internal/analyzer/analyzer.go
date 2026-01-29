@@ -660,7 +660,7 @@ func (a *Analyzer) parseSupplementsInWorkingDir(absDir, relDir string) map[suppl
 		if entry.IsDir() {
 			continue
 		}
-		relPath := filepath.Join(relDir, entry.Name())
+		relPath := filepath.ToSlash(filepath.Join(relDir, entry.Name()))
 		if !isSupplementFile(relPath) {
 			continue
 		}
