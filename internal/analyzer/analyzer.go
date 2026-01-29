@@ -594,13 +594,15 @@ func (a *Analyzer) DependenciesInWorkingDir(root string) ([]Change, error) {
 			return nil
 		}
 
-		_, _, ok := manifests.Identify(filepath.Base(path))
-		if !ok {
-			return nil
-		}
-
 		relPath, err := filepath.Rel(root, path)
 		if err != nil {
+			return nil
+		}
+		// Normalize to forward slashes for cross-platform consistency with git paths
+		relPath = filepath.ToSlash(relPath)
+
+		_, _, ok := manifests.Identify(relPath)
+		if !ok {
 			return nil
 		}
 
@@ -658,7 +660,7 @@ func (a *Analyzer) parseSupplementsInWorkingDir(absDir, relDir string) map[suppl
 		if entry.IsDir() {
 			continue
 		}
-		relPath := filepath.Join(relDir, entry.Name())
+		relPath := filepath.ToSlash(filepath.Join(relDir, entry.Name()))
 		if !isSupplementFile(relPath) {
 			continue
 		}
