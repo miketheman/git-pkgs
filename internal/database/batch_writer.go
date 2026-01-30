@@ -123,6 +123,22 @@ func (w *BatchWriter) AddSnapshot(sha string, manifest ManifestInfo, snapshot Sn
 	})
 }
 
+// AddEmptySnapshot stores a marker to indicate this commit has no dependencies.
+// This allows GetDependenciesAtRef to distinguish "no snapshot taken" from "empty snapshot".
+func (w *BatchWriter) AddEmptySnapshot(sha string) {
+	w.pendingSnapshots = append(w.pendingSnapshots, pendingSnapshot{
+		sha: sha,
+		manifest: ManifestInfo{
+			Path:      "_EMPTY_",
+			Ecosystem: "",
+			Kind:      "",
+		},
+		snapshot: SnapshotInfo{
+			Name: "_EMPTY_MARKER_",
+		},
+	})
+}
+
 func (w *BatchWriter) ShouldFlush() bool {
 	return len(w.pendingCommits) >= w.batchSize
 }

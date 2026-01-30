@@ -76,7 +76,9 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	var result *DiffResult
 
-	if stateless {
+	// When comparing to working tree, always use stateless mode since there's
+	// no database state for uncommitted changes
+	if stateless || toRef == "" {
 		result, err = diffStateless(repo, fromRef, toRef)
 	} else {
 		result, err = diffFromDB(repo, fromRef, toRef)
@@ -214,16 +216,17 @@ func diffStateless(repo *git.Repository, fromRef, toRef string) (*DiffResult, er
 func computeDiff(fromDeps, toDeps []database.Dependency) *DiffResult {
 	result := &DiffResult{}
 
-	// Build maps keyed by manifest:name
+	// Build maps keyed by manifest:name:requirement to handle packages that appear
+	// multiple times with different versions (e.g., npm nested dependencies)
 	fromMap := make(map[string]database.Dependency)
 	for _, d := range fromDeps {
-		key := d.ManifestPath + ":" + d.Name
+		key := d.ManifestPath + ":" + d.Name + ":" + d.Requirement
 		fromMap[key] = d
 	}
 
 	toMap := make(map[string]database.Dependency)
 	for _, d := range toDeps {
-		key := d.ManifestPath + ":" + d.Name
+		key := d.ManifestPath + ":" + d.Name + ":" + d.Requirement
 		toMap[key] = d
 	}
 
