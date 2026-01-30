@@ -214,16 +214,17 @@ func diffStateless(repo *git.Repository, fromRef, toRef string) (*DiffResult, er
 func computeDiff(fromDeps, toDeps []database.Dependency) *DiffResult {
 	result := &DiffResult{}
 
-	// Build maps keyed by manifest:name
+	// Build maps keyed by manifest:name:requirement to handle packages that appear
+	// multiple times with different versions (e.g., npm nested dependencies)
 	fromMap := make(map[string]database.Dependency)
 	for _, d := range fromDeps {
-		key := d.ManifestPath + ":" + d.Name
+		key := d.ManifestPath + ":" + d.Name + ":" + d.Requirement
 		fromMap[key] = d
 	}
 
 	toMap := make(map[string]database.Dependency)
 	for _, d := range toDeps {
-		key := d.ManifestPath + ":" + d.Name
+		key := d.ManifestPath + ":" + d.Name + ":" + d.Requirement
 		toMap[key] = d
 	}
 
