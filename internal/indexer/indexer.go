@@ -21,9 +21,11 @@ type Options struct {
 }
 
 type Result struct {
-	CommitsAnalyzed int
+	CommitsAnalyzed    int
 	CommitsWithChanges int
-	TotalChanges int
+	TotalChanges       int
+	TagSnapshots       int
+	BranchSnapshots    int
 }
 
 type Indexer struct {
@@ -54,6 +56,16 @@ func (idx *Indexer) Run() (*Result, error) {
 
 	if err := idx.db.OptimizeForBulkWrites(); err != nil {
 		return nil, fmt.Errorf("optimizing database: %w", err)
+	}
+
+	// Collect SHAs that should always have snapshots (tags and branch heads)
+	tagsBySHA := make(map[string][]string)
+	branchesBySHA := make(map[string][]string)
+	if tags, err := idx.repo.Tags(); err == nil {
+		tagsBySHA = tags
+	}
+	if branches, err := idx.repo.LocalBranches(); err == nil {
+		branchesBySHA = branches
 	}
 
 	writer := database.NewBatchWriter(idx.db)
@@ -160,8 +172,9 @@ func (idx *Indexer) Run() (*Result, error) {
 				writer.AddChange(sha, manifest, changeInfo)
 			}
 
-			// Store snapshot at intervals
-			if writer.ShouldStoreSnapshot() {
+			// Store snapshot at intervals or for important commits (tags, branch heads)
+			isImportant := len(tagsBySHA[sha]) > 0 || len(branchesBySHA[sha]) > 0
+			if writer.ShouldStoreSnapshot() || isImportant {
 				for key, entry := range analysisResult.Snapshot {
 					manifest := database.ManifestInfo{
 						Path:      key.ManifestPath,
@@ -179,7 +192,34 @@ func (idx *Indexer) Run() (*Result, error) {
 					}
 					writer.AddSnapshot(sha, manifest, snapshotInfo)
 				}
+				if isImportant {
+					idx.logImportantSnapshot(sha, tagsBySHA[sha], branchesBySHA[sha])
+					result.TagSnapshots += len(tagsBySHA[sha])
+					result.BranchSnapshots += len(branchesBySHA[sha])
+				}
 			}
+		} else if len(snapshot) > 0 && (len(tagsBySHA[sha]) > 0 || len(branchesBySHA[sha]) > 0) {
+			// Store snapshot for important commits (tags, branch heads) even without changes
+			for key, entry := range snapshot {
+				manifest := database.ManifestInfo{
+					Path:      key.ManifestPath,
+					Ecosystem: entry.Ecosystem,
+					Kind:      entry.Kind,
+				}
+				snapshotInfo := database.SnapshotInfo{
+					ManifestPath:   key.ManifestPath,
+					Name:           key.Name,
+					Ecosystem:      entry.Ecosystem,
+					PURL:           entry.PURL,
+					Requirement:    entry.Requirement,
+					DependencyType: entry.DependencyType,
+					Integrity:      entry.Integrity,
+				}
+				writer.AddSnapshot(sha, manifest, snapshotInfo)
+			}
+			idx.logImportantSnapshot(sha, tagsBySHA[sha], branchesBySHA[sha])
+			result.TagSnapshots += len(tagsBySHA[sha])
+			result.BranchSnapshots += len(branchesBySHA[sha])
 		}
 
 		if writer.ShouldFlush() {
@@ -281,3 +321,16 @@ func (idx *Indexer) collectCommits(branch string, sinceSHA string) ([]*object.Co
 }
 
 var errStopIteration = fmt.Errorf("stop iteration")
+
+func (idx *Indexer) logImportantSnapshot(sha string, tags, branches []string) {
+	if idx.opts.Quiet || idx.opts.Output == nil {
+		return
+	}
+	shortSHA := sha[:7]
+	for _, tag := range tags {
+		_, _ = fmt.Fprintf(idx.opts.Output, "  Snapshot at tag %s (%s)\n", tag, shortSHA)
+	}
+	for _, branch := range branches {
+		_, _ = fmt.Fprintf(idx.opts.Output, "  Snapshot at branch %s (%s)\n", branch, shortSHA)
+	}
+}
