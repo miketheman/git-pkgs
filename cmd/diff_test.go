@@ -50,7 +50,7 @@ func TestDiff_ManifestDeleted(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	// Run diff (HEAD vs working tree)
 	rootCmd := NewRootCmd()
@@ -120,7 +120,7 @@ func TestDiff_ManifestDeletedBetweenCommits(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	// Initialize database
 	rootCmd := NewRootCmd()
