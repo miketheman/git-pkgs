@@ -290,7 +290,7 @@ func (db *DB) getDependenciesForCommitID(commitID int64) ([]Dependency, error) {
 		SELECT ds.name, ds.ecosystem, ds.purl, ds.requirement, ds.dependency_type, ds.integrity, m.path, m.kind
 		FROM dependency_snapshots ds
 		JOIN manifests m ON m.id = ds.manifest_id
-		WHERE ds.commit_id = ?
+		WHERE ds.commit_id = ? AND ds.name != '_EMPTY_MARKER_'
 		ORDER BY m.path, ds.name
 	`, commitID)
 	if err != nil {

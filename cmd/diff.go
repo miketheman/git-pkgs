@@ -76,7 +76,9 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	var result *DiffResult
 
-	if stateless {
+	// When comparing to working tree, always use stateless mode since there's
+	// no database state for uncommitted changes
+	if stateless || toRef == "" {
 		result, err = diffStateless(repo, fromRef, toRef)
 	} else {
 		result, err = diffFromDB(repo, fromRef, toRef)

@@ -120,6 +120,7 @@ func (idx *Indexer) Run() (*Result, error) {
 
 	result := &Result{}
 	var lastSHAWithChanges string
+	var firstSnapshotStored bool
 
 	for i, commit := range commits {
 		if !idx.opts.Quiet && idx.opts.Output != nil && (i+1)%100 == 0 {
@@ -172,25 +173,32 @@ func (idx *Indexer) Run() (*Result, error) {
 				writer.AddChange(sha, manifest, changeInfo)
 			}
 
-			// Store snapshot at intervals or for important commits (tags, branch heads)
+			// Store snapshot at first commit, at intervals, or for important commits (tags, branch heads)
 			isImportant := len(tagsBySHA[sha]) > 0 || len(branchesBySHA[sha]) > 0
-			if writer.ShouldStoreSnapshot() || isImportant {
-				for key, entry := range analysisResult.Snapshot {
-					manifest := database.ManifestInfo{
-						Path:      key.ManifestPath,
-						Ecosystem: entry.Ecosystem,
-						Kind:      entry.Kind,
+			shouldStore := !firstSnapshotStored || writer.ShouldStoreSnapshot() || isImportant
+			if shouldStore {
+				firstSnapshotStored = true
+				if len(analysisResult.Snapshot) == 0 {
+					// Store empty snapshot marker so we know this commit was analyzed
+					writer.AddEmptySnapshot(sha)
+				} else {
+					for key, entry := range analysisResult.Snapshot {
+						manifest := database.ManifestInfo{
+							Path:      key.ManifestPath,
+							Ecosystem: entry.Ecosystem,
+							Kind:      entry.Kind,
+						}
+						snapshotInfo := database.SnapshotInfo{
+							ManifestPath:   key.ManifestPath,
+							Name:           key.Name,
+							Ecosystem:      entry.Ecosystem,
+							PURL:           entry.PURL,
+							Requirement:    entry.Requirement,
+							DependencyType: entry.DependencyType,
+							Integrity:      entry.Integrity,
+						}
+						writer.AddSnapshot(sha, manifest, snapshotInfo)
 					}
-					snapshotInfo := database.SnapshotInfo{
-						ManifestPath:   key.ManifestPath,
-						Name:           key.Name,
-						Ecosystem:      entry.Ecosystem,
-						PURL:           entry.PURL,
-						Requirement:    entry.Requirement,
-						DependencyType: entry.DependencyType,
-						Integrity:      entry.Integrity,
-					}
-					writer.AddSnapshot(sha, manifest, snapshotInfo)
 				}
 				if isImportant {
 					idx.logImportantSnapshot(sha, tagsBySHA[sha], branchesBySHA[sha])
@@ -230,23 +238,28 @@ func (idx *Indexer) Run() (*Result, error) {
 	}
 
 	// Always store final snapshot for the last commit with changes
-	if lastSHAWithChanges != "" && len(snapshot) > 0 && !writer.HasPendingSnapshots(lastSHAWithChanges) {
-		for key, entry := range snapshot {
-			manifest := database.ManifestInfo{
-				Path:      key.ManifestPath,
-				Ecosystem: entry.Ecosystem,
-				Kind:      entry.Kind,
+	if lastSHAWithChanges != "" && !writer.HasPendingSnapshots(lastSHAWithChanges) {
+		if len(snapshot) == 0 {
+			// Store empty snapshot marker
+			writer.AddEmptySnapshot(lastSHAWithChanges)
+		} else {
+			for key, entry := range snapshot {
+				manifest := database.ManifestInfo{
+					Path:      key.ManifestPath,
+					Ecosystem: entry.Ecosystem,
+					Kind:      entry.Kind,
+				}
+				snapshotInfo := database.SnapshotInfo{
+					ManifestPath:   key.ManifestPath,
+					Name:           key.Name,
+					Ecosystem:      entry.Ecosystem,
+					PURL:           entry.PURL,
+					Requirement:    entry.Requirement,
+					DependencyType: entry.DependencyType,
+					Integrity:      entry.Integrity,
+				}
+				writer.AddSnapshot(lastSHAWithChanges, manifest, snapshotInfo)
 			}
-			snapshotInfo := database.SnapshotInfo{
-				ManifestPath:   key.ManifestPath,
-				Name:           key.Name,
-				Ecosystem:      entry.Ecosystem,
-				PURL:           entry.PURL,
-				Requirement:    entry.Requirement,
-				DependencyType: entry.DependencyType,
-				Integrity:      entry.Integrity,
-			}
-			writer.AddSnapshot(lastSHAWithChanges, manifest, snapshotInfo)
 		}
 	}
 
