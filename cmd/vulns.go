@@ -11,6 +11,7 @@ import (
 	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/git-pkgs/internal/git"
 	"github.com/git-pkgs/git-pkgs/internal/osv"
+	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/vers"
 	"github.com/spf13/cobra"
 )
@@ -149,7 +150,8 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 	for key := range uniquePkgs {
 		// Check if recently synced (unless force)
 		if !force {
-			syncedAt, _ := db.GetVulnsSyncedAt(key.ecosystem, key.name)
+			purlStr := purl.MakePURLString(key.ecosystem, key.name, "")
+			syncedAt, _ := db.GetVulnsSyncedAt(purlStr)
 			if !syncedAt.IsZero() && time.Since(syncedAt) < 24*time.Hour {
 				continue
 			}
@@ -258,7 +260,8 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 		}
 
 		// Mark as synced so we don't re-query within 24 hours
-		if err := db.SetVulnsSyncedAt(key.ecosystem, key.name); err != nil {
+		purlStr := purl.MakePURLString(key.ecosystem, key.name, "")
+		if err := db.SetVulnsSyncedAt(purlStr, key.ecosystem, key.name); err != nil {
 			return fmt.Errorf("recording sync time for %s/%s: %w", key.ecosystem, key.name, err)
 		}
 	}
