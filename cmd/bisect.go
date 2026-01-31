@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/git-pkgs/git-pkgs/internal/bisect"
 	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/git-pkgs/internal/git"
+	"github.com/git-pkgs/git-pkgs/internal/indexer"
 	"github.com/spf13/cobra"
 )
 
@@ -490,12 +492,38 @@ func doBisectStep(cmd *cobra.Command, repo *git.Repository, mgr *bisect.Manager,
 	if err != nil {
 		return fmt.Errorf("opening database: %w", err)
 	}
-	defer func() { _ = db.Close() }()
 
 	branchInfo, err := db.GetDefaultBranch()
 	if err != nil {
+		_ = db.Close()
 		return fmt.Errorf("getting branch: %w", err)
 	}
+
+	// Check if commits are indexed, reindex if needed
+	badPos, _ := db.GetCommitPosition(state.BadRev, branchInfo.ID)
+	goodPos, _ := db.GetCommitPosition(state.GoodRevs[0], branchInfo.ID)
+	if badPos == 0 || goodPos == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Commits not indexed, running reindex...")
+
+		idx := indexer.New(repo, db, indexer.Options{
+			Branch:      branchInfo.Name,
+			Output:      io.Discard,
+			Quiet:       true,
+			Incremental: true,
+		})
+		if _, err := idx.Run(); err != nil {
+			_ = db.Close()
+			return fmt.Errorf("reindexing: %w", err)
+		}
+
+		// Refresh branch info after reindex
+		branchInfo, err = db.GetDefaultBranch()
+		if err != nil {
+			_ = db.Close()
+			return fmt.Errorf("getting branch after reindex: %w", err)
+		}
+	}
+	defer func() { _ = db.Close() }()
 
 	// Get candidates between good and bad
 	// Use the oldest good commit as the start point
