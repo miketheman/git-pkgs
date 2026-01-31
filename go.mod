@@ -9,7 +9,7 @@ require (
 	github.com/git-pkgs/purl v0.1.4
 	github.com/git-pkgs/registries v0.2.3
 	github.com/git-pkgs/spdx v0.1.0
-	github.com/git-pkgs/vers v0.2.1
+	github.com/git-pkgs/vers v0.2.2
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/mattn/go-isatty v0.0.20
 	github.com/package-url/packageurl-go v0.1.3
