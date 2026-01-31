@@ -519,6 +519,7 @@ type HistoryEntry struct {
 	Requirement         string `json:"requirement"`
 	PreviousRequirement string `json:"previous_requirement,omitempty"`
 	ManifestPath        string `json:"manifest_path"`
+	ManifestKind        string `json:"manifest_kind"`
 }
 
 type HistoryOptions struct {
@@ -1262,7 +1263,7 @@ func (db *DB) GetBlame(branchID int64, ecosystem string) ([]BlameEntry, error) {
 func (db *DB) GetPackageHistory(opts HistoryOptions) ([]HistoryEntry, error) {
 	query := `
 		SELECT c.sha, c.message, c.author_name, c.author_email, c.committed_at,
-		       dc.name, dc.ecosystem, dc.change_type, dc.requirement, dc.previous_requirement, m.path
+		       dc.name, dc.ecosystem, dc.change_type, dc.requirement, dc.previous_requirement, m.path, m.kind
 		FROM dependency_changes dc
 		JOIN commits c ON c.id = dc.commit_id
 		JOIN branch_commits bc ON bc.commit_id = c.id
@@ -1304,10 +1305,10 @@ func (db *DB) GetPackageHistory(opts HistoryOptions) ([]HistoryEntry, error) {
 	var entries []HistoryEntry
 	for rows.Next() {
 		var e HistoryEntry
-		var message, authorName, authorEmail, ecosystem, requirement, prevReq sql.NullString
+		var message, authorName, authorEmail, ecosystem, requirement, prevReq, manifestKind sql.NullString
 
 		if err := rows.Scan(&e.SHA, &message, &authorName, &authorEmail, &e.CommittedAt,
-			&e.Name, &ecosystem, &e.ChangeType, &requirement, &prevReq, &e.ManifestPath); err != nil {
+			&e.Name, &ecosystem, &e.ChangeType, &requirement, &prevReq, &e.ManifestPath, &manifestKind); err != nil {
 			return nil, err
 		}
 
@@ -1328,6 +1329,9 @@ func (db *DB) GetPackageHistory(opts HistoryOptions) ([]HistoryEntry, error) {
 		}
 		if prevReq.Valid {
 			e.PreviousRequirement = prevReq.String
+		}
+		if manifestKind.Valid {
+			e.ManifestKind = manifestKind.String
 		}
 
 		entries = append(entries, e)

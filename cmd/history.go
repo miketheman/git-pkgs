@@ -103,53 +103,128 @@ func capitalize(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
+// groupedEntry combines manifest and lockfile entries for the same change
+type groupedEntry struct {
+	database.HistoryEntry
+	ManifestRequirement string // constraint from manifest file
+	LockfileRequirement string // resolved version from lockfile
+}
+
+func groupHistoryEntries(entries []database.HistoryEntry) []groupedEntry {
+	// Group by (SHA, Name, ChangeType)
+	type groupKey struct {
+		SHA        string
+		Name       string
+		ChangeType string
+	}
+	groups := make(map[groupKey]*groupedEntry)
+	var order []groupKey
+
+	for _, e := range entries {
+		key := groupKey{SHA: e.SHA, Name: e.Name, ChangeType: e.ChangeType}
+		if g, ok := groups[key]; ok {
+			// Add to existing group
+			if e.ManifestKind == "lockfile" {
+				g.LockfileRequirement = e.Requirement
+			} else {
+				g.ManifestRequirement = e.Requirement
+			}
+		} else {
+			// New group
+			g := &groupedEntry{HistoryEntry: e}
+			if e.ManifestKind == "lockfile" {
+				g.LockfileRequirement = e.Requirement
+			} else {
+				g.ManifestRequirement = e.Requirement
+			}
+			groups[key] = g
+			order = append(order, key)
+		}
+	}
+
+	result := make([]groupedEntry, 0, len(order))
+	for _, key := range order {
+		result = append(result, *groups[key])
+	}
+	return result
+}
+
+func formatRequirement(g groupedEntry) string {
+	if g.ManifestRequirement != "" && g.LockfileRequirement != "" {
+		// Show both if different: constraint (resolved)
+		if g.ManifestRequirement != g.LockfileRequirement {
+			return fmt.Sprintf("%s (%s)", g.ManifestRequirement, g.LockfileRequirement)
+		}
+		return g.LockfileRequirement
+	}
+	if g.LockfileRequirement != "" {
+		return g.LockfileRequirement
+	}
+	return g.ManifestRequirement
+}
+
+func formatPreviousRequirement(g groupedEntry) string {
+	// For updates, we only have the previous from whichever manifest reported it
+	return g.PreviousRequirement
+}
+
 func outputHistoryText(cmd *cobra.Command, entries []database.HistoryEntry, packageName string) error {
 	if packageName != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "History for %s:\n\n", Bold(packageName))
 	}
 
-	for _, e := range entries {
+	grouped := groupHistoryEntries(entries)
+
+	// Check if we have multiple distinct packages
+	distinctPackages := make(map[string]bool)
+	for _, g := range grouped {
+		distinctPackages[g.Name] = true
+	}
+	showPackageName := packageName == "" || len(distinctPackages) > 1
+
+	for _, g := range grouped {
 		// Date and change type
-		date := e.CommittedAt[:10]
+		date := g.CommittedAt[:10]
+		req := formatRequirement(g)
 
 		var line string
-		switch e.ChangeType {
+		switch g.ChangeType {
 		case "added":
 			line = fmt.Sprintf("%s %s", date, Green("Added"))
-			if e.Requirement != "" {
-				line += fmt.Sprintf(" = %s", e.Requirement)
+			if req != "" {
+				line += fmt.Sprintf(" %s", req)
 			}
 		case "modified":
 			line = fmt.Sprintf("%s %s", date, Yellow("Updated"))
-			if e.PreviousRequirement != "" || e.Requirement != "" {
-				line += fmt.Sprintf(" = %s -> = %s", Dim(e.PreviousRequirement), e.Requirement)
+			prev := formatPreviousRequirement(g)
+			if prev != "" || req != "" {
+				line += fmt.Sprintf(" %s -> %s", Dim(prev), req)
 			}
 		case "removed":
 			line = fmt.Sprintf("%s %s", date, Red("Removed"))
-			if e.Requirement != "" {
-				line += fmt.Sprintf(" = %s", e.Requirement)
+			if req != "" {
+				line += fmt.Sprintf(" %s", req)
 			}
 		default:
-			line = fmt.Sprintf("%s %s", date, capitalize(e.ChangeType))
+			line = fmt.Sprintf("%s %s", date, capitalize(g.ChangeType))
 		}
 
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
 
-		// If showing all packages, show the package name
-		if packageName == "" {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Package: %s %s\n", Bold(e.Name), Dim("("+e.Ecosystem+")"))
+		// Show package name if showing all packages or multiple match
+		if showPackageName {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Package: %s %s\n", Bold(g.Name), Dim("("+g.Ecosystem+")"))
 		}
 
 		// First line of commit message
-		message := e.Message
+		message := g.Message
 		if idx := strings.Index(message, "\n"); idx > 0 {
 			message = message[:idx]
 		}
 		message = strings.TrimSpace(message)
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Commit: %s %s\n", Yellow(e.SHA[:7]), message)
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Author: %s %s\n", e.AuthorName, Dim("<"+e.AuthorEmail+">"))
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Manifest: %s\n", Dim(e.ManifestPath))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Commit: %s %s\n", Yellow(g.SHA[:7]), message)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Author: %s %s\n", g.AuthorName, Dim("<"+g.AuthorEmail+">"))
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
