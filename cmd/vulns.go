@@ -107,10 +107,14 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting dependencies: %w", err)
 	}
 
-	// Filter to lockfile deps
+	// Filter to lockfile deps (or Go deps which have pinned versions in go.sum)
 	var lockfileDeps []database.Dependency
 	for _, d := range deps {
-		if d.ManifestKind != "lockfile" || d.Requirement == "" {
+		if d.Requirement == "" {
+			continue
+		}
+		// Go dependencies have pinned versions even though go.sum isn't a lockfile
+		if d.ManifestKind != "lockfile" && d.Ecosystem != "golang" {
 			continue
 		}
 		if ecosystem != "" && d.Ecosystem != ecosystem {
@@ -378,10 +382,14 @@ func runVulnsScan(cmd *cobra.Command, args []string) error {
 		deps = filtered
 	}
 
-	// Filter to lockfile deps (with versions)
+	// Filter to lockfile deps (or Go deps which have pinned versions)
 	var lockfileDeps []database.Dependency
 	for _, d := range deps {
-		if d.ManifestKind == "lockfile" && d.Requirement != "" {
+		if d.Requirement == "" {
+			continue
+		}
+		// Go dependencies have pinned versions even though go.sum isn't a lockfile
+		if d.ManifestKind == "lockfile" || d.Ecosystem == "golang" {
 			lockfileDeps = append(lockfileDeps, d)
 		}
 	}
@@ -913,7 +921,11 @@ func analyzeVulnExposure(vuln *osv.Vulnerability, ref, branchName string) (*Vuln
 
 	// Check if any dependency is affected by this vulnerability
 	for _, dep := range deps {
-		if dep.ManifestKind != "lockfile" || dep.Requirement == "" {
+		if dep.Requirement == "" {
+			continue
+		}
+		// Go dependencies have pinned versions even though go.sum isn't a lockfile
+		if dep.ManifestKind != "lockfile" && dep.Ecosystem != "golang" {
 			continue
 		}
 
@@ -1138,7 +1150,11 @@ func getVulnsAtRef(db *database.DB, branchID int64, ref, ecosystem string) ([]Vu
 
 	var lockfileDeps []database.Dependency
 	for _, d := range deps {
-		if d.ManifestKind == "lockfile" && d.Requirement != "" {
+		if d.Requirement == "" {
+			continue
+		}
+		// Go dependencies have pinned versions even though go.sum isn't a lockfile
+		if d.ManifestKind == "lockfile" || d.Ecosystem == "golang" {
 			lockfileDeps = append(lockfileDeps, d)
 		}
 	}
@@ -1637,7 +1653,11 @@ func runVulnsHistory(cmd *cobra.Command, args []string) error {
 		// Find the package in deps
 		var pkgDep *database.Dependency
 		for _, d := range deps {
-			if strings.EqualFold(d.Name, packageName) && d.ManifestKind == "lockfile" {
+			if !strings.EqualFold(d.Name, packageName) {
+				continue
+			}
+			// Go dependencies have pinned versions even though go.sum isn't a lockfile
+			if d.ManifestKind == "lockfile" || d.Ecosystem == "golang" {
 				pkgDep = &d
 				break
 			}
