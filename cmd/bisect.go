@@ -195,7 +195,7 @@ func runBisectStart(cmd *cobra.Command, args []string) error {
 	if state.BadRev == "" {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Mark a bad commit with 'git pkgs bisect bad <rev>'")
 	} else {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Bad commit: %s\n", state.BadRev[:7])
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Bad commit: %s\n", shortSHA(state.BadRev))
 	}
 	if len(state.GoodRevs) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Mark a good commit with 'git pkgs bisect good <rev>'")
@@ -232,8 +232,8 @@ func runBisectGood(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("resolving revision %q: %w", rev, err)
 		}
 		state.GoodRevs = append(state.GoodRevs, sha)
-		_ = mgr.AppendLog(fmt.Sprintf("git pkgs bisect good %s", sha[:7]))
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as good\n", sha[:7])
+		_ = mgr.AppendLog(fmt.Sprintf("git pkgs bisect good %s", shortSHA(sha)))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as good\n", shortSHA(sha))
 	}
 
 	if err := mgr.Save(state); err != nil {
@@ -278,8 +278,8 @@ func runBisectBad(cmd *cobra.Command, args []string) error {
 	}
 
 	state.BadRev = sha
-	_ = mgr.AppendLog(fmt.Sprintf("git pkgs bisect bad %s", sha[:7]))
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as bad\n", sha[:7])
+	_ = mgr.AppendLog(fmt.Sprintf("git pkgs bisect bad %s", shortSHA(sha)))
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as bad\n", shortSHA(sha))
 
 	if err := mgr.Save(state); err != nil {
 		return fmt.Errorf("saving state: %w", err)
@@ -320,8 +320,8 @@ func runBisectSkip(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("resolving revision %q: %w", rev, err)
 		}
 		state.SkippedRevs = append(state.SkippedRevs, sha)
-		_ = mgr.AppendLog(fmt.Sprintf("git pkgs bisect skip %s", sha[:7]))
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped %s\n", sha[:7])
+		_ = mgr.AppendLog(fmt.Sprintf("git pkgs bisect skip %s", shortSHA(sha)))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped %s\n", shortSHA(sha))
 	}
 
 	if err := mgr.Save(state); err != nil {
@@ -378,7 +378,7 @@ func runBisectRun(cmd *cobra.Command, args []string) error {
 
 		// Get current HEAD for logging
 		head, _ := repo.Head()
-		currentSHA := head.Hash().String()[:7]
+		currentSHA := shortSHA(head.Hash().String())
 
 		var result string
 		switch {
@@ -452,7 +452,7 @@ func runBisectReset(cmd *cobra.Command, args []string) error {
 		if err := gitCheckout(state.OriginalHead); err != nil {
 			return fmt.Errorf("restoring original HEAD: %w", err)
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Restored to %s\n", state.OriginalHead[:7])
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Restored to %s\n", shortSHA(state.OriginalHead))
 	}
 
 	if err := mgr.Clean(); err != nil {
@@ -568,7 +568,7 @@ func doBisectStep(cmd *cobra.Command, repo *git.Repository, mgr *bisect.Manager,
 
 	// Checkout the target commit
 	if err := gitCheckout(target.SHA); err != nil {
-		return fmt.Errorf("checking out %s: %w", target.SHA[:7], err)
+		return fmt.Errorf("checking out %s: %w", shortSHA(target.SHA), err)
 	}
 
 	state.CurrentSHA = target.SHA
@@ -592,7 +592,7 @@ func doBisectStep(cmd *cobra.Command, repo *git.Repository, mgr *bisect.Manager,
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Bisecting: %d dependency changes left to test (roughly %d steps)\n",
 		len(remaining), steps)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n", Yellow(target.SHA[:7]), subject)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n", Yellow(shortSHA(target.SHA)), subject)
 
 	return nil
 }

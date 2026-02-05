@@ -125,7 +125,7 @@ func outputBlameText(cmd *cobra.Command, entries []database.BlameEntry) error {
 				maxNameLen, e.Name,
 				maxAuthorLen, e.AuthorName,
 				date,
-				e.SHA[:7])
+				shortSHA(e.SHA))
 		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}

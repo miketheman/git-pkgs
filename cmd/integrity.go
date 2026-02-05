@@ -86,7 +86,7 @@ func runIntegrity(cmd *cobra.Command, args []string) error {
 	if ecosystem != "" {
 		var filtered []database.Dependency
 		for _, d := range deps {
-			if d.Ecosystem == ecosystem {
+			if strings.EqualFold(d.Ecosystem, ecosystem) {
 				filtered = append(filtered, d)
 			}
 		}

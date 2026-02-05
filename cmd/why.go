@@ -75,7 +75,7 @@ func outputWhyJSON(cmd *cobra.Command, result *database.WhyResult) error {
 }
 
 func outputWhyText(cmd *cobra.Command, result *database.WhyResult) error {
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s was added in commit %s\n\n", result.Name, result.SHA[:7])
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s was added in commit %s\n\n", result.Name, shortSHA(result.SHA))
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Date:     %s\n", result.CommittedAt[:10])
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Author:   %s <%s>\n", result.AuthorName, result.AuthorEmail)
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Manifest: %s\n", result.ManifestPath)
