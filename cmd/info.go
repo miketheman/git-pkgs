@@ -100,7 +100,7 @@ func outputInfoText(cmd *cobra.Command, info *database.DatabaseInfo) error {
 	if info.BranchName != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Branch: %s\n", info.BranchName)
 		if info.LastAnalyzedSHA != "" {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Last analyzed: %s\n", info.LastAnalyzedSHA[:7])
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Last analyzed: %s\n", shortSHA(info.LastAnalyzedSHA))
 		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}

@@ -412,7 +412,7 @@ func runVulnsScan(cmd *cobra.Command, args []string) error {
 	if ecosystem != "" {
 		var filtered []database.Dependency
 		for _, d := range deps {
-			if d.Ecosystem == ecosystem {
+			if strings.EqualFold(d.Ecosystem, ecosystem) {
 				filtered = append(filtered, d)
 			}
 		}
@@ -1178,7 +1178,7 @@ func getVulnsAtRef(db *database.DB, branchID int64, ref, ecosystem string) ([]Vu
 	if ecosystem != "" {
 		var filtered []database.Dependency
 		for _, d := range deps {
-			if d.Ecosystem == ecosystem {
+			if strings.EqualFold(d.Ecosystem, ecosystem) {
 				filtered = append(filtered, d)
 			}
 		}
@@ -1407,7 +1407,7 @@ func runVulnsBlame(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s (%d):\n", author, len(vulnEntries))
 		for _, e := range vulnEntries {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s - %s@%s (%s)\n", e.VulnID, e.Package, e.Version, e.Severity)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Added in %s\n", e.AddedCommit[:7])
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Added in %s\n", shortSHA(e.AddedCommit))
 		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
@@ -1596,7 +1596,7 @@ func runVulnsLog(cmd *cobra.Command, args []string) error {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Vulnerability changes in %d commits:\n\n", len(entries))
 
 	for _, e := range entries {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s (%s)\n", e.SHA[:7], e.Message, e.Author)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s (%s)\n", shortSHA(e.SHA), e.Message, e.Author)
 
 		for _, v := range e.Introduced {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  + %s - %s@%s (%s)\n", v.ID, v.Package, v.Version, v.Severity)
@@ -1754,7 +1754,7 @@ func runVulnsHistory(cmd *cobra.Command, args []string) error {
 
 	for _, h := range history {
 		date := h.Date[:10]
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s", h.SHA[:7], date, h.Version)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s", shortSHA(h.SHA), date, h.Version)
 		if len(h.Vulnerabilities) > 0 {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  (%d vulnerabilities)\n", len(h.Vulnerabilities))
 			for _, v := range h.Vulnerabilities {
@@ -2173,7 +2173,7 @@ func runVulnsPraise(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s (%d fixes):\n", author, len(fixes))
 		for _, e := range fixes {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  - %s in %s (%s)\n", e.VulnID, e.Package, e.Severity)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Fixed in %s on %s\n", e.FixedIn[:7], e.FixedDate[:10])
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Fixed in %s on %s\n", shortSHA(e.FixedIn), e.FixedDate[:10])
 		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}

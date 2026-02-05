@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/git-pkgs/git-pkgs/internal/database"
@@ -144,7 +145,7 @@ func runSBOM(cmd *cobra.Command, args []string) error {
 	if ecosystem != "" {
 		var filtered []database.Dependency
 		for _, d := range deps {
-			if d.Ecosystem == ecosystem {
+			if strings.EqualFold(d.Ecosystem, ecosystem) {
 				filtered = append(filtered, d)
 			}
 		}
