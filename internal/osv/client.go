@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	gocvss30 "github.com/pandatix/go-cvss/30"
+	gocvss31 "github.com/pandatix/go-cvss/31"
+
 	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/vers"
 )
@@ -247,7 +250,7 @@ func (c *Client) GetVulnerability(ctx context.Context, id string) (*Vulnerabilit
 func GetSeverityLevel(v *Vulnerability) string {
 	for _, sev := range v.Severity {
 		if sev.Type == "CVSS_V3" {
-			score := parseCVSSScore(sev.Score)
+			score := ParseCVSSScore(sev.Score)
 			if score >= 9.0 {
 				return "critical"
 			} else if score >= 7.0 {
@@ -269,12 +272,24 @@ func GetSeverityLevel(v *Vulnerability) string {
 	return "unknown"
 }
 
-func parseCVSSScore(score string) float64 {
-	// CVSS scores can be in various formats
-	// Try to extract the numeric score
+func ParseCVSSScore(score string) float64 {
+	// Try parsing as a plain numeric score first
 	var numScore float64
-	_, _ = fmt.Sscanf(score, "%f", &numScore)
-	return numScore
+	if _, err := fmt.Sscanf(score, "%f", &numScore); err == nil && !strings.HasPrefix(score, "CVSS:") {
+		return numScore
+	}
+
+	// Parse as CVSS v3.1 vector
+	if v31, err := gocvss31.ParseVector(score); err == nil {
+		return v31.BaseScore()
+	}
+
+	// Parse as CVSS v3.0 vector
+	if v30, err := gocvss30.ParseVector(score); err == nil {
+		return v30.BaseScore()
+	}
+
+	return 0
 }
 
 // GetFixedVersion returns the fixed version for an affected entry, if available.

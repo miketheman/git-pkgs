@@ -13,6 +13,7 @@ require (
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/mattn/go-isatty v0.0.20
 	github.com/package-url/packageurl-go v0.1.3
+	github.com/pandatix/go-cvss v0.6.2
 	github.com/spf13/cobra v1.10.2
 	modernc.org/sqlite v1.44.3
 )

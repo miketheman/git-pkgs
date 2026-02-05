@@ -249,9 +249,7 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 		for _, sev := range v.Severity {
 			if sev.Type == "CVSS_V3" {
 				dbVuln.CVSSVector = sev.Score
-				var score float64
-				_, _ = fmt.Sscanf(sev.Score, "%f", &score)
-				dbVuln.CVSSScore = score
+				dbVuln.CVSSScore = osv.ParseCVSSScore(sev.Score)
 			}
 		}
 
