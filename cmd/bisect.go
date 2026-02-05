@@ -377,8 +377,14 @@ func runBisectRun(cmd *cobra.Command, args []string) error {
 		}
 
 		// Get current HEAD for logging
-		head, _ := repo.Head()
-		currentSHA := head.Hash().String()[:7]
+		head, err := repo.Head()
+		if err != nil {
+			return fmt.Errorf("getting HEAD: %w", err)
+		}
+		currentSHA := head.Hash().String()
+		if len(currentSHA) > 7 {
+			currentSHA = currentSHA[:7]
+		}
 
 		var result string
 		switch {
