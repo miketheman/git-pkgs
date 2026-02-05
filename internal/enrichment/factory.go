@@ -26,8 +26,8 @@ func NewClient() (Client, error) {
 // Environment variable takes precedence over git config.
 func directMode() bool {
 	// Check environment variable first
-	if os.Getenv("GIT_PKGS_DIRECT") != "" {
-		return true
+	if v := os.Getenv("GIT_PKGS_DIRECT"); v != "" {
+		return v == "true" || v == "1" || v == "yes"
 	}
 
 	// Check git config

@@ -372,6 +372,32 @@ func TestStoreSnapshotWithDuplicates(t *testing.T) {
 	}
 }
 
+func TestNewWriterClose(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "pkgs.sqlite3")
+
+	db, err := database.Create(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create database: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	writer, err := database.NewWriter(db)
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
+
+	// Close should not error
+	if err := writer.Close(); err != nil {
+		t.Errorf("unexpected error closing writer: %v", err)
+	}
+
+	// Close again should not panic (statements are nil-safe)
+	if err := writer.Close(); err != nil {
+		t.Errorf("unexpected error on second close: %v", err)
+	}
+}
+
 func TestSchemaIndexes(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "pkgs.sqlite3")

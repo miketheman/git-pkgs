@@ -57,7 +57,7 @@ func (c *EcosystemsClient) BulkLookup(ctx context.Context, purls []string) (map[
 func (c *EcosystemsClient) GetVersions(ctx context.Context, purl string) ([]VersionInfo, error) {
 	p, err := packageurl.FromString(purl)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	versions, err := c.client.GetAllVersionsPURL(ctx, p)
@@ -79,7 +79,7 @@ func (c *EcosystemsClient) GetVersions(ctx context.Context, purl string) ([]Vers
 func (c *EcosystemsClient) GetVersion(ctx context.Context, purl string) (*VersionInfo, error) {
 	p, err := packageurl.FromString(purl)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	v, err := c.client.GetVersionPURL(ctx, p)

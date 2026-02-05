@@ -123,7 +123,9 @@ func (a *Analyzer) PrefetchDiffs(commits []*object.Commit, numWorkers int) {
 		if strings.HasPrefix(line, "COMMIT:") {
 			// Save previous commit
 			if currentSHA != "" && currentDiff != nil {
+				a.diffMu.Lock()
 				a.diffCache[currentSHA] = currentDiff
+				a.diffMu.Unlock()
 			}
 			currentSHA = line[7:] // Remove "COMMIT:" prefix
 			currentDiff = &cachedDiff{}
@@ -181,7 +183,9 @@ func (a *Analyzer) PrefetchDiffs(commits []*object.Commit, numWorkers int) {
 
 	// Don't forget the last commit
 	if currentSHA != "" && currentDiff != nil {
+		a.diffMu.Lock()
 		a.diffCache[currentSHA] = currentDiff
+		a.diffMu.Unlock()
 	}
 }
 

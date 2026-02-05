@@ -53,7 +53,24 @@ type Writer struct {
 }
 
 func NewWriter(db *DB) (*Writer, error) {
-	commitStmt, err := db.Prepare(`
+	var stmts []*sql.Stmt
+	closeAll := func() {
+		for _, s := range stmts {
+			_ = s.Close()
+		}
+	}
+
+	prepare := func(query string) (*sql.Stmt, error) {
+		s, err := db.Prepare(query)
+		if err != nil {
+			closeAll()
+			return nil, err
+		}
+		stmts = append(stmts, s)
+		return s, nil
+	}
+
+	commitStmt, err := prepare(`
 		INSERT INTO commits (sha, message, author_name, author_email, committed_at, has_dependency_changes, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`)
@@ -61,7 +78,7 @@ func NewWriter(db *DB) (*Writer, error) {
 		return nil, err
 	}
 
-	branchCommitStmt, err := db.Prepare(`
+	branchCommitStmt, err := prepare(`
 		INSERT INTO branch_commits (branch_id, commit_id, position)
 		VALUES (?, ?, ?)
 	`)
@@ -69,7 +86,7 @@ func NewWriter(db *DB) (*Writer, error) {
 		return nil, err
 	}
 
-	manifestStmt, err := db.Prepare(`
+	manifestStmt, err := prepare(`
 		INSERT INTO manifests (path, ecosystem, kind, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?)
 	`)
@@ -77,7 +94,7 @@ func NewWriter(db *DB) (*Writer, error) {
 		return nil, err
 	}
 
-	changeStmt, err := db.Prepare(`
+	changeStmt, err := prepare(`
 		INSERT INTO dependency_changes (commit_id, manifest_id, name, ecosystem, purl, change_type, requirement, previous_requirement, dependency_type, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
@@ -85,7 +102,7 @@ func NewWriter(db *DB) (*Writer, error) {
 		return nil, err
 	}
 
-	snapshotStmt, err := db.Prepare(`
+	snapshotStmt, err := prepare(`
 		INSERT INTO dependency_snapshots (commit_id, manifest_id, name, ecosystem, purl, requirement, dependency_type, integrity, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)

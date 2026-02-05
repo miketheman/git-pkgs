@@ -428,7 +428,7 @@ func managerNames(detected []DetectedManager) string {
 }
 
 // RunManagerCommand builds and executes a package manager command
-func RunManagerCommand(ctx context.Context, dir, managerName, operation string, input managers.CommandInput) error {
+func RunManagerCommand(ctx context.Context, dir, managerName, operation string, input managers.CommandInput, stdout, stderr io.Writer) error {
 	translator, err := getTranslator()
 	if err != nil {
 		return err
@@ -445,10 +445,10 @@ func RunManagerCommand(ctx context.Context, dir, managerName, operation string, 
 	}
 
 	if result.Stdout != "" {
-		_, _ = os.Stdout.WriteString(result.Stdout)
+		_, _ = io.WriteString(stdout, result.Stdout)
 	}
 	if result.Stderr != "" {
-		_, _ = os.Stderr.WriteString(result.Stderr)
+		_, _ = io.WriteString(stderr, result.Stderr)
 	}
 
 	if result.ExitCode != 0 {
@@ -459,7 +459,7 @@ func RunManagerCommand(ctx context.Context, dir, managerName, operation string, 
 }
 
 // RunManagerCommands builds and executes multiple package manager commands (for chained operations)
-func RunManagerCommands(ctx context.Context, dir, managerName, operation string, input managers.CommandInput) error {
+func RunManagerCommands(ctx context.Context, dir, managerName, operation string, input managers.CommandInput, stdout, stderr io.Writer) error {
 	translator, err := getTranslator()
 	if err != nil {
 		return err
@@ -477,10 +477,10 @@ func RunManagerCommands(ctx context.Context, dir, managerName, operation string,
 		}
 
 		if result.Stdout != "" {
-			_, _ = os.Stdout.WriteString(result.Stdout)
+			_, _ = io.WriteString(stdout, result.Stdout)
 		}
 		if result.Stderr != "" {
-			_, _ = os.Stderr.WriteString(result.Stderr)
+			_, _ = io.WriteString(stderr, result.Stderr)
 		}
 
 		if result.ExitCode != 0 {

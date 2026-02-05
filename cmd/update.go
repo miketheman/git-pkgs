@@ -118,7 +118,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if err := RunManagerCommands(ctx, dir, mgr.Name, "update", input); err != nil {
+	if err := RunManagerCommands(ctx, dir, mgr.Name, "update", input, cmd.OutOrStdout(), cmd.ErrOrStderr()); err != nil {
 		return fmt.Errorf("update failed: %w", err)
 	}
 
