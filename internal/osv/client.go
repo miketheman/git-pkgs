@@ -161,10 +161,13 @@ func (c *Client) BatchQuery(ctx context.Context, queries []QueryRequest) ([][]Vu
 		return nil, nil
 	}
 
-	// Normalize ecosystems
-	for i := range queries {
-		queries[i].Package.Ecosystem = purl.EcosystemToOSV(queries[i].Package.Ecosystem)
+	// Copy and normalize ecosystems to avoid mutating caller's slice
+	normalized := make([]QueryRequest, len(queries))
+	copy(normalized, queries)
+	for i := range normalized {
+		normalized[i].Package.Ecosystem = purl.EcosystemToOSV(normalized[i].Package.Ecosystem)
 	}
+	queries = normalized
 
 	// OSV batch API has a limit of 1000 queries per request
 	const batchSize = 1000

@@ -131,17 +131,10 @@ func doUninstallHooks(cmd *cobra.Command, hooksDir string) error {
 			// It's appended to another hook - remove our lines
 			lines := strings.Split(string(content), "\n")
 			var newLines []string
-			skipNext := false
 			for _, line := range lines {
-				if skipNext {
-					skipNext = false
-					continue
-				}
-				if line == "# git-pkgs hook" || strings.Contains(line, "git-pkgs post-commit") {
-					skipNext = true
-					continue
-				}
-				if strings.Contains(line, "git pkgs reindex") {
+				if line == "# git-pkgs hook" ||
+					strings.Contains(line, "git-pkgs post-commit") ||
+					strings.Contains(line, "git pkgs reindex") {
 					continue
 				}
 				newLines = append(newLines, line)

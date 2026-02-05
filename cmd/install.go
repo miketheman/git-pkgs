@@ -109,7 +109,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		if err := RunManagerCommands(ctx, dir, mgr.Name, "install", input); err != nil {
+		if err := RunManagerCommands(ctx, dir, mgr.Name, "install", input, cmd.OutOrStdout(), cmd.ErrOrStderr()); err != nil {
 			return fmt.Errorf("%s install failed: %w", mgr.Name, err)
 		}
 	}
