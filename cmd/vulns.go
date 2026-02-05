@@ -326,43 +326,36 @@ func buildVersRange(ranges []osv.Range, ecosystem string) string {
 			continue
 		}
 
-		var introduced, fixed, lastAffected string
+		// Process events sequentially, emitting a constraint for each
+		// introduced/fixed or introduced/lastAffected pair.
+		var introduced string
 		for _, e := range r.Events {
 			if e.Introduced != "" {
 				introduced = e.Introduced
 			}
-			if e.Fixed != "" {
-				fixed = e.Fixed
+			if e.Fixed != "" && introduced != "" {
+				if introduced == "0" {
+					parts = append(parts, fmt.Sprintf("<%s", e.Fixed))
+				} else {
+					parts = append(parts, fmt.Sprintf(">=%s|<%s", introduced, e.Fixed))
+				}
+				introduced = ""
 			}
-			if e.LastAffected != "" {
-				lastAffected = e.LastAffected
+			if e.LastAffected != "" && introduced != "" {
+				if introduced == "0" {
+					parts = append(parts, fmt.Sprintf("<=%s", e.LastAffected))
+				} else {
+					parts = append(parts, fmt.Sprintf(">=%s|<=%s", introduced, e.LastAffected))
+				}
+				introduced = ""
 			}
 		}
-
+		// Handle trailing introduced with no fix
 		if introduced != "" {
-			// Handle "0" as the minimum version (unbounded lower)
 			if introduced == "0" {
-				if fixed != "" {
-					// Versions < fixed are affected
-					parts = append(parts, fmt.Sprintf("<%s", fixed))
-				} else if lastAffected != "" {
-					// Versions <= lastAffected are affected
-					parts = append(parts, fmt.Sprintf("<=%s", lastAffected))
-				} else {
-					// All versions affected
-					parts = append(parts, "*")
-				}
+				parts = append(parts, "*")
 			} else {
-				if fixed != "" {
-					// Versions >= introduced and < fixed are affected
-					parts = append(parts, fmt.Sprintf(">=%s|<%s", introduced, fixed))
-				} else if lastAffected != "" {
-					// Versions >= introduced and <= lastAffected are affected
-					parts = append(parts, fmt.Sprintf(">=%s|<=%s", introduced, lastAffected))
-				} else {
-					// Versions >= introduced are affected (no upper bound)
-					parts = append(parts, fmt.Sprintf(">=%s", introduced))
-				}
+				parts = append(parts, fmt.Sprintf(">=%s", introduced))
 			}
 		}
 	}
