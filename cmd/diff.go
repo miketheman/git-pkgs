@@ -158,17 +158,16 @@ func changesToDeps(changes []analyzer.Change) []database.Dependency {
 func computeDiff(fromDeps, toDeps []database.Dependency) *DiffResult {
 	result := &DiffResult{}
 
-	// Build maps keyed by manifest:name:requirement to handle packages that appear
-	// multiple times with different versions (e.g., npm nested dependencies)
+	// Build maps keyed by manifest:name to detect added, removed, and modified
 	fromMap := make(map[string]database.Dependency)
 	for _, d := range fromDeps {
-		key := d.ManifestPath + ":" + d.Name + ":" + d.Requirement
+		key := d.ManifestPath + ":" + d.Name
 		fromMap[key] = d
 	}
 
 	toMap := make(map[string]database.Dependency)
 	for _, d := range toDeps {
-		key := d.ManifestPath + ":" + d.Name + ":" + d.Requirement
+		key := d.ManifestPath + ":" + d.Name
 		toMap[key] = d
 	}
 

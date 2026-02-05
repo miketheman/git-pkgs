@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/git-pkgs/git-pkgs/internal/database"
 )
 
 func TestDiff_ManifestDeleted(t *testing.T) {
@@ -351,6 +353,78 @@ func TestDiff_TypeFilter(t *testing.T) {
 	}
 	if !containsString(out, "eslint") {
 		t.Errorf("expected eslint to be shown, got:\n%s", out)
+	}
+}
+
+func TestComputeDiff_Modified(t *testing.T) {
+	fromDeps := []database.Dependency{
+		{Name: "lodash", Ecosystem: "npm", Requirement: "^4.0.0", ManifestPath: "package.json"},
+		{Name: "react", Ecosystem: "npm", Requirement: "^17.0.0", ManifestPath: "package.json"},
+		{Name: "express", Ecosystem: "npm", Requirement: "^4.18.0", ManifestPath: "package.json"},
+	}
+	toDeps := []database.Dependency{
+		{Name: "lodash", Ecosystem: "npm", Requirement: "^4.1.0", ManifestPath: "package.json"},
+		{Name: "react", Ecosystem: "npm", Requirement: "^17.0.0", ManifestPath: "package.json"},
+		{Name: "axios", Ecosystem: "npm", Requirement: "^1.0.0", ManifestPath: "package.json"},
+	}
+
+	result := computeDiff(fromDeps, toDeps)
+
+	// lodash changed version: should be modified
+	if len(result.Modified) != 1 {
+		t.Fatalf("expected 1 modified, got %d: %+v", len(result.Modified), result.Modified)
+	}
+	if result.Modified[0].Name != "lodash" {
+		t.Errorf("expected modified entry for lodash, got %s", result.Modified[0].Name)
+	}
+	if result.Modified[0].FromRequirement != "^4.0.0" {
+		t.Errorf("expected FromRequirement '^4.0.0', got %s", result.Modified[0].FromRequirement)
+	}
+	if result.Modified[0].ToRequirement != "^4.1.0" {
+		t.Errorf("expected ToRequirement '^4.1.0', got %s", result.Modified[0].ToRequirement)
+	}
+
+	// axios added
+	if len(result.Added) != 1 {
+		t.Fatalf("expected 1 added, got %d: %+v", len(result.Added), result.Added)
+	}
+	if result.Added[0].Name != "axios" {
+		t.Errorf("expected added entry for axios, got %s", result.Added[0].Name)
+	}
+
+	// express removed
+	if len(result.Removed) != 1 {
+		t.Fatalf("expected 1 removed, got %d: %+v", len(result.Removed), result.Removed)
+	}
+	if result.Removed[0].Name != "express" {
+		t.Errorf("expected removed entry for express, got %s", result.Removed[0].Name)
+	}
+}
+
+func TestComputeDiff_SamePackageDifferentManifests(t *testing.T) {
+	// Same package in different manifests should be tracked independently
+	fromDeps := []database.Dependency{
+		{Name: "lodash", Ecosystem: "npm", Requirement: "^3.0.0", ManifestPath: "packages/a/package.json"},
+		{Name: "lodash", Ecosystem: "npm", Requirement: "^4.0.0", ManifestPath: "packages/b/package.json"},
+	}
+	toDeps := []database.Dependency{
+		{Name: "lodash", Ecosystem: "npm", Requirement: "^3.1.0", ManifestPath: "packages/a/package.json"},
+		{Name: "lodash", Ecosystem: "npm", Requirement: "^4.0.0", ManifestPath: "packages/b/package.json"},
+	}
+
+	result := computeDiff(fromDeps, toDeps)
+
+	if len(result.Modified) != 1 {
+		t.Fatalf("expected 1 modified, got %d: %+v", len(result.Modified), result.Modified)
+	}
+	if result.Modified[0].ManifestPath != "packages/a/package.json" {
+		t.Errorf("expected modified in packages/a/package.json, got %s", result.Modified[0].ManifestPath)
+	}
+	if len(result.Added) != 0 {
+		t.Errorf("expected 0 added, got %d", len(result.Added))
+	}
+	if len(result.Removed) != 0 {
+		t.Errorf("expected 0 removed, got %d", len(result.Removed))
 	}
 }
 
