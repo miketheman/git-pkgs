@@ -246,15 +246,17 @@ type Dependency struct {
 }
 
 func (db *DB) GetDependenciesAtCommit(sha string) ([]Dependency, error) {
-	// Find the most recent snapshot at or before this commit
+	// Find the most recent snapshot at or before this commit using position
 	var commitID int64
 	err := db.QueryRow(`
 		SELECT ds.commit_id
 		FROM dependency_snapshots ds
-		JOIN commits c ON c.id = ds.commit_id
-		JOIN branch_commits bc ON bc.commit_id = c.id
-		WHERE c.sha <= ?
-		ORDER BY bc.position DESC
+		JOIN branch_commits snap_bc ON snap_bc.commit_id = ds.commit_id
+		JOIN commits c ON c.sha = ?
+		JOIN branch_commits target_bc ON target_bc.commit_id = c.id
+			AND target_bc.branch_id = snap_bc.branch_id
+		WHERE snap_bc.position <= target_bc.position
+		ORDER BY snap_bc.position DESC
 		LIMIT 1
 	`, sha).Scan(&commitID)
 	if err == sql.ErrNoRows {
