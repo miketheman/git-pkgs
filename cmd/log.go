@@ -99,7 +99,7 @@ func outputLogText(cmd *cobra.Command, commits []database.CommitWithChanges) err
 			message = message[:57] + "..."
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", Yellow(c.SHA[:7]), message)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", Yellow(shortSHA(c.SHA)), message)
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Author: %s %s\n", c.AuthorName, Dim("<"+c.AuthorEmail+">"))
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Date:   %s\n", c.CommittedAt[:10])
 

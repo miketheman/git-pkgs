@@ -77,15 +77,7 @@ func runLicenses(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if ecosystem != "" {
-		var filtered []database.Dependency
-		for _, d := range deps {
-			if d.Ecosystem == ecosystem {
-				filtered = append(filtered, d)
-			}
-		}
-		deps = filtered
-	}
+	deps = filterByEcosystem(deps, ecosystem)
 
 	// Filter to manifest dependencies (direct deps)
 	var directDeps []database.Dependency

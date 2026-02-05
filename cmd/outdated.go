@@ -69,21 +69,12 @@ func runOutdated(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Filter by ecosystem
-	if ecosystem != "" {
-		var filtered []database.Dependency
-		for _, d := range deps {
-			if d.Ecosystem == ecosystem {
-				filtered = append(filtered, d)
-			}
-		}
-		deps = filtered
-	}
+	deps = filterByEcosystem(deps, ecosystem)
 
-	// Filter to lockfile dependencies only (those with versions)
+	// Filter to resolved dependencies (lockfiles and Go modules)
 	var lockfileDeps []database.Dependency
 	for _, d := range deps {
-		if d.ManifestKind == "lockfile" && d.Requirement != "" {
+		if isResolvedDependency(d) {
 			lockfileDeps = append(lockfileDeps, d)
 		}
 	}

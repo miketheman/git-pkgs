@@ -82,16 +82,7 @@ func runIntegrity(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Filter by ecosystem
-	if ecosystem != "" {
-		var filtered []database.Dependency
-		for _, d := range deps {
-			if d.Ecosystem == ecosystem {
-				filtered = append(filtered, d)
-			}
-		}
-		deps = filtered
-	}
+	deps = filterByEcosystem(deps, ecosystem)
 
 	// Handle registry mismatch check mode
 	if checkRegistry {

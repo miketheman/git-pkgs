@@ -223,7 +223,7 @@ func outputHistoryText(cmd *cobra.Command, entries []database.HistoryEntry, pack
 		}
 		message = strings.TrimSpace(message)
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Commit: %s %s\n", Yellow(g.SHA[:7]), message)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Commit: %s %s\n", Yellow(shortSHA(g.SHA)), message)
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Author: %s %s\n", g.AuthorName, Dim("<"+g.AuthorEmail+">"))
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/git-pkgs/git-pkgs/internal/database"
-	"github.com/git-pkgs/git-pkgs/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -31,33 +30,15 @@ func runStale(cmd *cobra.Command, args []string) error {
 	days, _ := cmd.Flags().GetInt("days")
 	format, _ := cmd.Flags().GetString("format")
 
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branchInfo *database.BranchInfo
-	if branchName != "" {
-		branchInfo, err = db.GetBranch(branchName)
-		if err != nil {
-			return fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branchInfo, err = db.GetDefaultBranch()
-		if err != nil {
-			return fmt.Errorf("getting branch: %w", err)
-		}
+	branchInfo, err := resolveBranch(db, branchName)
+	if err != nil {
+		return err
 	}
 
 	entries, err := db.GetStaleDependencies(branchInfo.ID, ecosystem, days)
