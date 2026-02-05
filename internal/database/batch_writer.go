@@ -204,26 +204,39 @@ func (w *BatchWriter) insertCommits(tx *sql.Tx, now time.Time) error {
 		return nil
 	}
 
-	// Build multi-value INSERT
-	var sb strings.Builder
-	sb.WriteString("INSERT INTO commits (sha, message, author_name, author_email, committed_at, has_dependency_changes, created_at, updated_at) VALUES ")
+	const columnsPerRow = 8
+	maxRowsPerBatch := MaxSQLVariables / columnsPerRow
 
-	args := make([]any, 0, len(w.pendingCommits)*8)
-	for i, pc := range w.pendingCommits {
-		if i > 0 {
-			sb.WriteString(",")
+	for start := 0; start < len(w.pendingCommits); start += maxRowsPerBatch {
+		end := start + maxRowsPerBatch
+		if end > len(w.pendingCommits) {
+			end = len(w.pendingCommits)
 		}
-		sb.WriteString("(?,?,?,?,?,?,?,?)")
+		batch := w.pendingCommits[start:end]
 
-		hasChanges := 0
-		if pc.hasChanges {
-			hasChanges = 1
+		var sb strings.Builder
+		sb.WriteString("INSERT INTO commits (sha, message, author_name, author_email, committed_at, has_dependency_changes, created_at, updated_at) VALUES ")
+
+		args := make([]any, 0, len(batch)*columnsPerRow)
+		for i, pc := range batch {
+			if i > 0 {
+				sb.WriteString(",")
+			}
+			sb.WriteString("(?,?,?,?,?,?,?,?)")
+
+			hasChanges := 0
+			if pc.hasChanges {
+				hasChanges = 1
+			}
+			args = append(args, pc.info.SHA, pc.info.Message, pc.info.AuthorName, pc.info.AuthorEmail, pc.info.CommittedAt, hasChanges, now, now)
 		}
-		args = append(args, pc.info.SHA, pc.info.Message, pc.info.AuthorName, pc.info.AuthorEmail, pc.info.CommittedAt, hasChanges, now, now)
+
+		if _, err := tx.Exec(sb.String(), args...); err != nil {
+			return err
+		}
 	}
 
-	_, err := tx.Exec(sb.String(), args...)
-	return err
+	return nil
 }
 
 func (w *BatchWriter) getCommitIDs(tx *sql.Tx) (map[string]int64, error) {
@@ -231,31 +244,45 @@ func (w *BatchWriter) getCommitIDs(tx *sql.Tx) (map[string]int64, error) {
 		return make(map[string]int64), nil
 	}
 
-	// Build IN clause
-	shas := make([]any, len(w.pendingCommits))
-	placeholders := make([]string, len(w.pendingCommits))
-	for i, pc := range w.pendingCommits {
-		shas[i] = pc.info.SHA
-		placeholders[i] = "?"
-	}
-
-	query := "SELECT sha, id FROM commits WHERE sha IN (" + strings.Join(placeholders, ",") + ")"
-	rows, err := tx.Query(query, shas...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
 	result := make(map[string]int64)
-	for rows.Next() {
-		var sha string
-		var id int64
-		if err := rows.Scan(&sha, &id); err != nil {
+
+	for start := 0; start < len(w.pendingCommits); start += MaxSQLVariables {
+		end := start + MaxSQLVariables
+		if end > len(w.pendingCommits) {
+			end = len(w.pendingCommits)
+		}
+		batch := w.pendingCommits[start:end]
+
+		shas := make([]any, len(batch))
+		placeholders := make([]string, len(batch))
+		for i, pc := range batch {
+			shas[i] = pc.info.SHA
+			placeholders[i] = "?"
+		}
+
+		query := "SELECT sha, id FROM commits WHERE sha IN (" + strings.Join(placeholders, ",") + ")"
+		rows, err := tx.Query(query, shas...)
+		if err != nil {
 			return nil, err
 		}
-		result[sha] = id
+
+		for rows.Next() {
+			var sha string
+			var id int64
+			if err := rows.Scan(&sha, &id); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			result[sha] = id
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		_ = rows.Close()
 	}
-	return result, rows.Err()
+
+	return result, nil
 }
 
 func (w *BatchWriter) insertBranchCommits(tx *sql.Tx, commitIDs map[string]int64) error {
@@ -263,20 +290,34 @@ func (w *BatchWriter) insertBranchCommits(tx *sql.Tx, commitIDs map[string]int64
 		return nil
 	}
 
-	var sb strings.Builder
-	sb.WriteString("INSERT INTO branch_commits (branch_id, commit_id, position) VALUES ")
+	const columnsPerRow = 3
+	maxRowsPerBatch := MaxSQLVariables / columnsPerRow
 
-	args := make([]any, 0, len(w.pendingCommits)*3)
-	for i, pc := range w.pendingCommits {
-		if i > 0 {
-			sb.WriteString(",")
+	for start := 0; start < len(w.pendingCommits); start += maxRowsPerBatch {
+		end := start + maxRowsPerBatch
+		if end > len(w.pendingCommits) {
+			end = len(w.pendingCommits)
 		}
-		sb.WriteString("(?,?,?)")
-		args = append(args, w.branchID, commitIDs[pc.info.SHA], pc.position)
+		batch := w.pendingCommits[start:end]
+
+		var sb strings.Builder
+		sb.WriteString("INSERT INTO branch_commits (branch_id, commit_id, position) VALUES ")
+
+		args := make([]any, 0, len(batch)*columnsPerRow)
+		for i, pc := range batch {
+			if i > 0 {
+				sb.WriteString(",")
+			}
+			sb.WriteString("(?,?,?)")
+			args = append(args, w.branchID, commitIDs[pc.info.SHA], pc.position)
+		}
+
+		if _, err := tx.Exec(sb.String(), args...); err != nil {
+			return err
+		}
 	}
 
-	_, err := tx.Exec(sb.String(), args...)
-	return err
+	return nil
 }
 
 func (w *BatchWriter) ensureManifests(tx *sql.Tx, now time.Time) error {
