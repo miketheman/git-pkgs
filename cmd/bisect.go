@@ -496,10 +496,10 @@ func doBisectStep(cmd *cobra.Command, repo *git.Repository, mgr *bisect.Manager,
 		return fmt.Errorf("opening database: %w", err)
 	}
 
-	branchInfo, err := db.GetDefaultBranch()
+	branchInfo, err := resolveBranch(db, "")
 	if err != nil {
 		_ = db.Close()
-		return fmt.Errorf("getting branch: %w", err)
+		return err
 	}
 
 	// Check if commits are indexed, reindex if needed
@@ -520,10 +520,10 @@ func doBisectStep(cmd *cobra.Command, repo *git.Repository, mgr *bisect.Manager,
 		}
 
 		// Refresh branch info after reindex
-		branchInfo, err = db.GetDefaultBranch()
+		branchInfo, err = resolveBranch(db, "")
 		if err != nil {
 			_ = db.Close()
-			return fmt.Errorf("getting branch after reindex: %w", err)
+			return err
 		}
 	}
 	defer func() { _ = db.Close() }()
@@ -607,7 +607,7 @@ func checkBisectComplete(repo *git.Repository, mgr *bisect.Manager, state *bisec
 	}
 	defer func() { _ = db.Close() }()
 
-	branchInfo, err := db.GetDefaultBranch()
+	branchInfo, err := resolveBranch(db, "")
 	if err != nil {
 		return false, "", err
 	}

@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/git-pkgs/git-pkgs/internal/database"
-	"github.com/git-pkgs/git-pkgs/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -38,33 +36,15 @@ func runTree(cmd *cobra.Command, args []string) error {
 	ecosystem, _ := cmd.Flags().GetString("ecosystem")
 	format, _ := cmd.Flags().GetString("format")
 
-	repo, err := git.OpenRepository(".")
+	repo, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branchInfo *database.BranchInfo
-	if branchName != "" {
-		branchInfo, err = db.GetBranch(branchName)
-		if err != nil {
-			return fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branchInfo, err = db.GetDefaultBranch()
-		if err != nil {
-			return fmt.Errorf("getting branch: %w", err)
-		}
+	branchInfo, err := resolveBranch(db, branchName)
+	if err != nil {
+		return err
 	}
 
 	var deps []database.Dependency
@@ -81,16 +61,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting dependencies: %w", err)
 	}
 
-	// Filter by ecosystem
-	if ecosystem != "" {
-		var filtered []database.Dependency
-		for _, d := range deps {
-			if strings.EqualFold(d.Ecosystem, ecosystem) {
-				filtered = append(filtered, d)
-			}
-		}
-		deps = filtered
-	}
+	deps = filterByEcosystem(deps, ecosystem)
 
 	if len(deps) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No dependencies found.")

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/git-pkgs/git-pkgs/internal/database"
@@ -142,15 +141,7 @@ func runSBOM(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if ecosystem != "" {
-		var filtered []database.Dependency
-		for _, d := range deps {
-			if strings.EqualFold(d.Ecosystem, ecosystem) {
-				filtered = append(filtered, d)
-			}
-		}
-		deps = filtered
-	}
+	deps = filterByEcosystem(deps, ecosystem)
 
 	// Get licenses from cache or ecosyste.ms if not skipped
 	licenseMap := make(map[string][]string)

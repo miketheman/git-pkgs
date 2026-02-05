@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var severityOrder = map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
+
 func addVulnsCmd(parent *cobra.Command) {
 	vulnsCmd := &cobra.Command{
 		Use:   "vulns",
@@ -72,33 +74,15 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	quiet, _ := cmd.Flags().GetBool("quiet")
 
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branch *database.BranchInfo
-	if branchName != "" {
-		branch, err = db.GetBranch(branchName)
-		if err != nil {
-			return fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branch, err = db.GetDefaultBranch()
-		if err != nil {
-			return fmt.Errorf("getting branch: %w", err)
-		}
+	branch, err := resolveBranch(db, branchName)
+	if err != nil {
+		return err
 	}
 
 	// Get current lockfile dependencies
@@ -107,20 +91,13 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting dependencies: %w", err)
 	}
 
-	// Filter to lockfile deps (or Go deps which have pinned versions in go.sum)
+	// Filter to resolved lockfile deps
+	deps = filterByEcosystem(deps, ecosystem)
 	var lockfileDeps []database.Dependency
 	for _, d := range deps {
-		if d.Requirement == "" {
-			continue
+		if isResolvedDependency(d) {
+			lockfileDeps = append(lockfileDeps, d)
 		}
-		// Go dependencies have pinned versions even though go.sum isn't a lockfile
-		if d.ManifestKind != "lockfile" && d.Ecosystem != "golang" {
-			continue
-		}
-		if ecosystem != "" && d.Ecosystem != ecosystem {
-			continue
-		}
-		lockfileDeps = append(lockfileDeps, d)
 	}
 
 	if len(lockfileDeps) == 0 {
@@ -409,24 +386,12 @@ func runVulnsScan(cmd *cobra.Command, args []string) error {
 	}
 
 	// Filter by ecosystem
-	if ecosystem != "" {
-		var filtered []database.Dependency
-		for _, d := range deps {
-			if strings.EqualFold(d.Ecosystem, ecosystem) {
-				filtered = append(filtered, d)
-			}
-		}
-		deps = filtered
-	}
+	deps = filterByEcosystem(deps, ecosystem)
 
 	// Filter to lockfile deps (or Go deps which have pinned versions)
 	var lockfileDeps []database.Dependency
 	for _, d := range deps {
-		if d.Requirement == "" {
-			continue
-		}
-		// Go dependencies have pinned versions even though go.sum isn't a lockfile
-		if d.ManifestKind == "lockfile" || d.Ecosystem == "golang" {
+		if isResolvedDependency(d) {
 			lockfileDeps = append(lockfileDeps, d)
 		}
 	}
@@ -437,7 +402,7 @@ func runVulnsScan(cmd *cobra.Command, args []string) error {
 	}
 
 	var vulnResults []VulnResult
-	severityOrder := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
+
 	minSeverity := 4
 	if severity != "" {
 		if order, ok := severityOrder[strings.ToLower(severity)]; ok {
@@ -503,7 +468,7 @@ func scanLive(deps []database.Dependency, minSeverity int) ([]VulnResult, error)
 		return nil, fmt.Errorf("querying OSV: %w", err)
 	}
 
-	severityOrder := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
+
 	var vulnResults []VulnResult
 
 	for i, vulns := range results {
@@ -546,7 +511,7 @@ func scanLive(deps []database.Dependency, minSeverity int) ([]VulnResult, error)
 }
 
 func scanCached(db *database.DB, deps []database.Dependency, minSeverity int) ([]VulnResult, error) {
-	severityOrder := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
+
 	var vulnResults []VulnResult
 
 	// Group deps by ecosystem+name for efficient querying
@@ -921,33 +886,15 @@ func runVulnsShow(cmd *cobra.Command, args []string) error {
 }
 
 func analyzeVulnExposure(vuln *osv.Vulnerability, ref, branchName string) (*VulnShowExposure, error) {
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return nil, fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return nil, fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("opening database: %w", err)
+		return nil, err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branch *database.BranchInfo
-	if branchName != "" {
-		branch, err = db.GetBranch(branchName)
-		if err != nil {
-			return nil, fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branch, err = db.GetDefaultBranch()
-		if err != nil {
-			return nil, fmt.Errorf("getting branch: %w", err)
-		}
+	branch, err := resolveBranch(db, branchName)
+	if err != nil {
+		return nil, err
 	}
 
 	// Get dependencies at the specified ref
@@ -958,11 +905,7 @@ func analyzeVulnExposure(vuln *osv.Vulnerability, ref, branchName string) (*Vuln
 
 	// Check if any dependency is affected by this vulnerability
 	for _, dep := range deps {
-		if dep.Requirement == "" {
-			continue
-		}
-		// Go dependencies have pinned versions even though go.sum isn't a lockfile
-		if dep.ManifestKind != "lockfile" && dep.Ecosystem != "golang" {
+		if !isResolvedDependency(dep) {
 			continue
 		}
 
@@ -1061,33 +1004,15 @@ func runVulnsDiff(cmd *cobra.Command, args []string) error {
 		toRef = args[1]
 	}
 
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branch *database.BranchInfo
-	if branchName != "" {
-		branch, err = db.GetBranch(branchName)
-		if err != nil {
-			return fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branch, err = db.GetDefaultBranch()
-		if err != nil {
-			return fmt.Errorf("getting branch: %w", err)
-		}
+	branch, err := resolveBranch(db, branchName)
+	if err != nil {
+		return err
 	}
 
 	// Get vulnerabilities at both refs
@@ -1115,7 +1040,7 @@ func runVulnsDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	// Find added and fixed
-	severityOrder := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
+
 	minSeverity := 4
 	if severity != "" {
 		if order, ok := severityOrder[strings.ToLower(severity)]; ok {
@@ -1175,23 +1100,11 @@ func getVulnsAtRef(db *database.DB, branchID int64, ref, ecosystem string) ([]Vu
 		return nil, err
 	}
 
-	if ecosystem != "" {
-		var filtered []database.Dependency
-		for _, d := range deps {
-			if strings.EqualFold(d.Ecosystem, ecosystem) {
-				filtered = append(filtered, d)
-			}
-		}
-		deps = filtered
-	}
+	deps = filterByEcosystem(deps, ecosystem)
 
 	var lockfileDeps []database.Dependency
 	for _, d := range deps {
-		if d.Requirement == "" {
-			continue
-		}
-		// Go dependencies have pinned versions even though go.sum isn't a lockfile
-		if d.ManifestKind == "lockfile" || d.Ecosystem == "golang" {
+		if isResolvedDependency(d) {
 			lockfileDeps = append(lockfileDeps, d)
 		}
 	}
@@ -1279,33 +1192,15 @@ func runVulnsBlame(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
 	allTime, _ := cmd.Flags().GetBool("all-time")
 
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branch *database.BranchInfo
-	if branchName != "" {
-		branch, err = db.GetBranch(branchName)
-		if err != nil {
-			return fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branch, err = db.GetDefaultBranch()
-		if err != nil {
-			return fmt.Errorf("getting branch: %w", err)
-		}
+	branch, err := resolveBranch(db, branchName)
+	if err != nil {
+		return err
 	}
 
 	// Get vulnerabilities
@@ -1320,7 +1215,7 @@ func runVulnsBlame(cmd *cobra.Command, args []string) error {
 	}
 
 	// Apply severity filter
-	severityOrder := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
+
 	minSeverity := 4
 	if severity != "" {
 		if order, ok := severityOrder[strings.ToLower(severity)]; ok {
@@ -1459,33 +1354,15 @@ func runVulnsLog(cmd *cobra.Command, args []string) error {
 	limit, _ := cmd.Flags().GetInt("limit")
 	format, _ := cmd.Flags().GetString("format")
 
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branch *database.BranchInfo
-	if branchName != "" {
-		branch, err = db.GetBranch(branchName)
-		if err != nil {
-			return fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branch, err = db.GetDefaultBranch()
-		if err != nil {
-			return fmt.Errorf("getting branch: %w", err)
-		}
+	branch, err := resolveBranch(db, branchName)
+	if err != nil {
+		return err
 	}
 
 	// Get commits with changes
@@ -1506,7 +1383,7 @@ func runVulnsLog(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	severityOrder := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
+
 	minSeverity := 4
 	if severity != "" {
 		if order, ok := severityOrder[strings.ToLower(severity)]; ok {
@@ -1640,33 +1517,15 @@ func runVulnsHistory(cmd *cobra.Command, args []string) error {
 	limit, _ := cmd.Flags().GetInt("limit")
 	format, _ := cmd.Flags().GetString("format")
 
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branch *database.BranchInfo
-	if branchName != "" {
-		branch, err = db.GetBranch(branchName)
-		if err != nil {
-			return fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branch, err = db.GetDefaultBranch()
-		if err != nil {
-			return fmt.Errorf("getting branch: %w", err)
-		}
+	branch, err := resolveBranch(db, branchName)
+	if err != nil {
+		return err
 	}
 
 	// Get commits with changes
@@ -1693,8 +1552,7 @@ func runVulnsHistory(cmd *cobra.Command, args []string) error {
 			if !strings.EqualFold(d.Name, packageName) {
 				continue
 			}
-			// Go dependencies have pinned versions even though go.sum isn't a lockfile
-			if d.ManifestKind == "lockfile" || d.Ecosystem == "golang" {
+			if isResolvedDependency(d) {
 				pkgDep = &d
 				break
 			}
@@ -1807,33 +1665,15 @@ func runVulnsExposure(cmd *cobra.Command, args []string) error {
 	summary, _ := cmd.Flags().GetBool("summary")
 	allTime, _ := cmd.Flags().GetBool("all-time")
 
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branch *database.BranchInfo
-	if branchName != "" {
-		branch, err = db.GetBranch(branchName)
-		if err != nil {
-			return fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branch, err = db.GetDefaultBranch()
-		if err != nil {
-			return fmt.Errorf("getting branch: %w", err)
-		}
+	branch, err := resolveBranch(db, branchName)
+	if err != nil {
+		return err
 	}
 
 	// Get vulnerabilities at the specified ref
@@ -1854,7 +1694,7 @@ func runVulnsExposure(cmd *cobra.Command, args []string) error {
 	}
 
 	// Apply severity filter
-	severityOrder := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
+
 	minSeverity := 4
 	if severity != "" {
 		if order, ok := severityOrder[strings.ToLower(severity)]; ok {
@@ -2040,33 +1880,15 @@ func runVulnsPraise(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
 	summary, _ := cmd.Flags().GetBool("summary")
 
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	var branch *database.BranchInfo
-	if branchName != "" {
-		branch, err = db.GetBranch(branchName)
-		if err != nil {
-			return fmt.Errorf("branch %q not found: %w", branchName, err)
-		}
-	} else {
-		branch, err = db.GetDefaultBranch()
-		if err != nil {
-			return fmt.Errorf("getting branch: %w", err)
-		}
+	branch, err := resolveBranch(db, branchName)
+	if err != nil {
+		return err
 	}
 
 	// Get commits with changes
@@ -2084,7 +1906,7 @@ func runVulnsPraise(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	severityOrder := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 4}
+
 	minSeverity := 4
 	if severity != "" {
 		if order, ok := severityOrder[strings.ToLower(severity)]; ok {

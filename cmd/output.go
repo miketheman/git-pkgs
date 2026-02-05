@@ -127,13 +127,6 @@ func Dim(text string) string {
 	return Colorize(text, colorDim)
 }
 
-func shortSHA(sha string) string {
-	if len(sha) > 7 {
-		return sha[:7]
-	}
-	return sha
-}
-
 // SetupOutput configures colour and pager for a command
 func SetupOutput(cmd *cobra.Command) {
 	c, _ := cmd.Flags().GetString("color")
