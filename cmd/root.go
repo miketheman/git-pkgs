@@ -87,6 +87,7 @@ func NewRootCmd() *cobra.Command {
 	addDiffFileCmd(cmd)
 	addBisectCmd(cmd)
 	addEcosystemsCmd(cmd)
+	addNotesCmd(cmd)
 
 	// Package manager commands
 	addInstallCmd(cmd)

@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -1998,6 +1999,171 @@ func (db *DB) SaveVersions(versions []CachedVersion) error {
 	}
 
 	return tx.Commit()
+}
+
+// Note represents a user-attached note on a PURL.
+type Note struct {
+	ID        int64             `json:"id"`
+	PURL      string            `json:"purl"`
+	Namespace string            `json:"namespace"`
+	Message   string            `json:"message,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	CreatedAt string            `json:"created_at"`
+	UpdatedAt string            `json:"updated_at"`
+}
+
+func (db *DB) InsertNote(note Note) error {
+	now := time.Now().Format(time.RFC3339)
+	metadataJSON := encodeMetadata(note.Metadata)
+	_, err := db.Exec(`
+		INSERT INTO notes (purl, namespace, message, metadata, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, note.PURL, note.Namespace, note.Message, metadataJSON, now, now)
+	return err
+}
+
+func (db *DB) UpdateNote(note Note) error {
+	now := time.Now().Format(time.RFC3339)
+	metadataJSON := encodeMetadata(note.Metadata)
+	_, err := db.Exec(`
+		UPDATE notes SET message = ?, metadata = ?, updated_at = ?
+		WHERE purl = ? AND namespace = ?
+	`, note.Message, metadataJSON, now, note.PURL, note.Namespace)
+	return err
+}
+
+func (db *DB) GetNote(purl, namespace string) (*Note, error) {
+	var n Note
+	var message, metadata sql.NullString
+	err := db.QueryRow(`
+		SELECT id, purl, namespace, message, metadata, created_at, updated_at
+		FROM notes WHERE purl = ? AND namespace = ?
+	`, purl, namespace).Scan(&n.ID, &n.PURL, &n.Namespace, &message, &metadata, &n.CreatedAt, &n.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if message.Valid {
+		n.Message = message.String
+	}
+	if metadata.Valid {
+		n.Metadata = decodeMetadata(metadata.String)
+	}
+	return &n, nil
+}
+
+func (db *DB) ListNotes(namespace, purlFilter string) ([]Note, error) {
+	query := "SELECT id, purl, namespace, message, metadata, created_at, updated_at FROM notes WHERE 1=1"
+	var args []any
+
+	if namespace != "" {
+		query += " AND namespace = ?"
+		args = append(args, namespace)
+	}
+	if purlFilter != "" {
+		query += " AND purl LIKE ?"
+		args = append(args, "%"+purlFilter+"%")
+	}
+
+	query += " ORDER BY purl, namespace"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var notes []Note
+	for rows.Next() {
+		var n Note
+		var message, metadata sql.NullString
+		if err := rows.Scan(&n.ID, &n.PURL, &n.Namespace, &message, &metadata, &n.CreatedAt, &n.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if message.Valid {
+			n.Message = message.String
+		}
+		if metadata.Valid {
+			n.Metadata = decodeMetadata(metadata.String)
+		}
+		notes = append(notes, n)
+	}
+	return notes, rows.Err()
+}
+
+func (db *DB) DeleteNote(purl, namespace string) error {
+	result, err := db.Exec("DELETE FROM notes WHERE purl = ? AND namespace = ?", purl, namespace)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("no note found for %s (namespace %q)", purl, namespace)
+	}
+	return nil
+}
+
+func (db *DB) AppendNote(purl, namespace, message string, metadata map[string]string) error {
+	existing, err := db.GetNote(purl, namespace)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return db.InsertNote(Note{
+			PURL:      purl,
+			Namespace: namespace,
+			Message:   message,
+			Metadata:  metadata,
+		})
+	}
+
+	newMessage := existing.Message
+	if message != "" {
+		if newMessage != "" {
+			newMessage += "\n" + message
+		} else {
+			newMessage = message
+		}
+	}
+
+	merged := existing.Metadata
+	if merged == nil {
+		merged = make(map[string]string)
+	}
+	for k, v := range metadata {
+		merged[k] = v
+	}
+
+	return db.UpdateNote(Note{
+		PURL:      purl,
+		Namespace: namespace,
+		Message:   newMessage,
+		Metadata:  merged,
+	})
+}
+
+func encodeMetadata(m map[string]string) string {
+	if len(m) == 0 {
+		return ""
+	}
+	data, _ := json.Marshal(m)
+	return string(data)
+}
+
+func decodeMetadata(s string) map[string]string {
+	if s == "" {
+		return nil
+	}
+	var m map[string]string
+	if json.Unmarshal([]byte(s), &m) != nil {
+		return nil
+	}
+	return m
 }
 
 // BisectCandidate represents a commit that changed dependencies, for use in bisect.
