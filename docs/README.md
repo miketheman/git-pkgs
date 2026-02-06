@@ -6,6 +6,7 @@ Technical documentation for git-pkgs maintainers and contributors.
 - [schema.md](schema.md) - Database tables and relationships
 - [vulns.md](vulns.md) - Vulnerability scanning via OSV
 - [ci-cd.md](ci-cd.md) - CI/CD integration examples
+- [notes.md](notes.md) - Attaching metadata to packages
 - [package-management.md](package-management.md) - Package manager commands
 
 For user-facing documentation, see the main [README](../README.md).

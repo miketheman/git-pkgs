@@ -153,6 +153,18 @@ func (db *DB) CreateSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_vuln_packages_ecosystem_name ON vulnerability_packages(ecosystem, package_name);
 	CREATE INDEX IF NOT EXISTS idx_vuln_packages_vuln_id ON vulnerability_packages(vulnerability_id);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_vuln_packages_unique ON vulnerability_packages(vulnerability_id, ecosystem, package_name);
+
+	CREATE TABLE IF NOT EXISTS notes (
+		id INTEGER PRIMARY KEY,
+		purl TEXT NOT NULL,
+		namespace TEXT NOT NULL DEFAULT '',
+		message TEXT,
+		metadata TEXT,
+		created_at DATETIME,
+		updated_at DATETIME
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_purl_namespace ON notes(purl, namespace);
+	CREATE INDEX IF NOT EXISTS idx_notes_namespace ON notes(namespace);
 	`
 
 	if _, err := db.Exec(schema); err != nil {
