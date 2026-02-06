@@ -421,6 +421,90 @@ func TestNotesAppend(t *testing.T) {
 	})
 }
 
+func TestNotesNamespaces(t *testing.T) {
+	t.Run("lists namespaces with counts", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		_, _, err := runCmd(t, "init")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		_, _, _ = runCmd(t, "notes", "add", "pkg:npm/lodash", "-m", "sec note", "--namespace", "security")
+		_, _, _ = runCmd(t, "notes", "add", "pkg:npm/express", "-m", "sec note 2", "--namespace", "security")
+		_, _, _ = runCmd(t, "notes", "add", "pkg:npm/lodash", "-m", "audit note", "--namespace", "audit")
+		_, _, _ = runCmd(t, "notes", "add", "pkg:npm/lodash", "-m", "default note")
+
+		stdout, _, err := runCmd(t, "notes", "namespaces")
+		if err != nil {
+			t.Fatalf("namespaces failed: %v", err)
+		}
+		if !strings.Contains(stdout, "security") {
+			t.Errorf("expected 'security' in output, got: %s", stdout)
+		}
+		if !strings.Contains(stdout, "audit") {
+			t.Errorf("expected 'audit' in output, got: %s", stdout)
+		}
+		if !strings.Contains(stdout, "(default)") {
+			t.Errorf("expected '(default)' in output, got: %s", stdout)
+		}
+		if !strings.Contains(stdout, "2 notes") {
+			t.Errorf("expected '2 notes' for security namespace, got: %s", stdout)
+		}
+	})
+
+	t.Run("outputs json format", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		_, _, err := runCmd(t, "init")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		_, _, _ = runCmd(t, "notes", "add", "pkg:npm/lodash", "-m", "note", "--namespace", "security")
+		_, _, _ = runCmd(t, "notes", "add", "pkg:npm/express", "-m", "note")
+
+		stdout, _, err := runCmd(t, "notes", "namespaces", "-f", "json")
+		if err != nil {
+			t.Fatalf("namespaces json failed: %v", err)
+		}
+
+		var namespaces []database.NamespaceCount
+		if err := json.Unmarshal([]byte(stdout), &namespaces); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+		if len(namespaces) != 2 {
+			t.Fatalf("expected 2 namespaces, got %d", len(namespaces))
+		}
+	})
+
+	t.Run("shows no notes message when empty", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		_, _, err := runCmd(t, "init")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		stdout, _, err := runCmd(t, "notes", "namespaces")
+		if err != nil {
+			t.Fatalf("namespaces failed: %v", err)
+		}
+		if !strings.Contains(stdout, "No notes found") {
+			t.Errorf("expected 'No notes found', got: %s", stdout)
+		}
+	})
+}
+
 func TestNotesNamespace(t *testing.T) {
 	t.Run("same purl different namespaces", func(t *testing.T) {
 		repoDir := createTestRepo(t)
