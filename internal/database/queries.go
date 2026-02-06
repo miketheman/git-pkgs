@@ -2006,6 +2006,7 @@ type Note struct {
 	ID        int64             `json:"id"`
 	PURL      string            `json:"purl"`
 	Namespace string            `json:"namespace"`
+	Origin    string            `json:"origin"`
 	Message   string            `json:"message,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
 	CreatedAt string            `json:"created_at"`
@@ -2015,20 +2016,28 @@ type Note struct {
 func (db *DB) InsertNote(note Note) error {
 	now := time.Now().Format(time.RFC3339)
 	metadataJSON := encodeMetadata(note.Metadata)
+	origin := note.Origin
+	if origin == "" {
+		origin = "git-pkgs"
+	}
 	_, err := db.Exec(`
-		INSERT INTO notes (purl, namespace, message, metadata, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, note.PURL, note.Namespace, note.Message, metadataJSON, now, now)
+		INSERT INTO notes (purl, namespace, origin, message, metadata, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, note.PURL, note.Namespace, origin, note.Message, metadataJSON, now, now)
 	return err
 }
 
 func (db *DB) UpdateNote(note Note) error {
 	now := time.Now().Format(time.RFC3339)
 	metadataJSON := encodeMetadata(note.Metadata)
+	origin := note.Origin
+	if origin == "" {
+		origin = "git-pkgs"
+	}
 	_, err := db.Exec(`
-		UPDATE notes SET message = ?, metadata = ?, updated_at = ?
+		UPDATE notes SET message = ?, metadata = ?, origin = ?, updated_at = ?
 		WHERE purl = ? AND namespace = ?
-	`, note.Message, metadataJSON, now, note.PURL, note.Namespace)
+	`, note.Message, metadataJSON, origin, now, note.PURL, note.Namespace)
 	return err
 }
 
@@ -2036,9 +2045,9 @@ func (db *DB) GetNote(purl, namespace string) (*Note, error) {
 	var n Note
 	var message, metadata sql.NullString
 	err := db.QueryRow(`
-		SELECT id, purl, namespace, message, metadata, created_at, updated_at
+		SELECT id, purl, namespace, origin, message, metadata, created_at, updated_at
 		FROM notes WHERE purl = ? AND namespace = ?
-	`, purl, namespace).Scan(&n.ID, &n.PURL, &n.Namespace, &message, &metadata, &n.CreatedAt, &n.UpdatedAt)
+	`, purl, namespace).Scan(&n.ID, &n.PURL, &n.Namespace, &n.Origin, &message, &metadata, &n.CreatedAt, &n.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -2055,7 +2064,7 @@ func (db *DB) GetNote(purl, namespace string) (*Note, error) {
 }
 
 func (db *DB) ListNotes(namespace, purlFilter string) ([]Note, error) {
-	query := "SELECT id, purl, namespace, message, metadata, created_at, updated_at FROM notes WHERE 1=1"
+	query := "SELECT id, purl, namespace, origin, message, metadata, created_at, updated_at FROM notes WHERE 1=1"
 	var args []any
 
 	if namespace != "" {
@@ -2079,7 +2088,7 @@ func (db *DB) ListNotes(namespace, purlFilter string) ([]Note, error) {
 	for rows.Next() {
 		var n Note
 		var message, metadata sql.NullString
-		if err := rows.Scan(&n.ID, &n.PURL, &n.Namespace, &message, &metadata, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.PURL, &n.Namespace, &n.Origin, &message, &metadata, &n.CreatedAt, &n.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if message.Valid {
@@ -2138,7 +2147,7 @@ func (db *DB) DeleteNote(purl, namespace string) error {
 	return nil
 }
 
-func (db *DB) AppendNote(purl, namespace, message string, metadata map[string]string) error {
+func (db *DB) AppendNote(purl, namespace, origin, message string, metadata map[string]string) error {
 	existing, err := db.GetNote(purl, namespace)
 	if err != nil {
 		return err
@@ -2147,6 +2156,7 @@ func (db *DB) AppendNote(purl, namespace, message string, metadata map[string]st
 		return db.InsertNote(Note{
 			PURL:      purl,
 			Namespace: namespace,
+			Origin:    origin,
 			Message:   message,
 			Metadata:  metadata,
 		})
@@ -2172,6 +2182,7 @@ func (db *DB) AppendNote(purl, namespace, message string, metadata map[string]st
 	return db.UpdateNote(Note{
 		PURL:      purl,
 		Namespace: namespace,
+		Origin:    existing.Origin,
 		Message:   newMessage,
 		Metadata:  merged,
 	})

@@ -28,6 +28,7 @@ notes (e.g. "security", "audit", "review"). The default namespace is empty.`,
 	}
 	addCmd.Flags().StringP("message", "m", "", "Note message")
 	addCmd.Flags().String("namespace", "", "Note namespace for categorization")
+	addCmd.Flags().String("origin", "git-pkgs", "Tool or system that created this note")
 	addCmd.Flags().StringArray("set", nil, "Set metadata key=value pair")
 	addCmd.Flags().Bool("force", false, "Overwrite existing note")
 
@@ -40,6 +41,7 @@ notes (e.g. "security", "audit", "review"). The default namespace is empty.`,
 	}
 	appendCmd.Flags().StringP("message", "m", "", "Message to append")
 	appendCmd.Flags().String("namespace", "", "Note namespace for categorization")
+	appendCmd.Flags().String("origin", "git-pkgs", "Tool or system that created this note")
 	appendCmd.Flags().StringArray("set", nil, "Set metadata key=value pair")
 
 	showCmd := &cobra.Command{
@@ -88,6 +90,7 @@ func runNotesAdd(cmd *cobra.Command, args []string) error {
 	purl := args[0]
 	message, _ := cmd.Flags().GetString("message")
 	namespace, _ := cmd.Flags().GetString("namespace")
+	origin, _ := cmd.Flags().GetString("origin")
 	setPairs, _ := cmd.Flags().GetStringArray("set")
 	force, _ := cmd.Flags().GetBool("force")
 
@@ -115,6 +118,7 @@ func runNotesAdd(cmd *cobra.Command, args []string) error {
 		err = db.UpdateNote(database.Note{
 			PURL:      purl,
 			Namespace: namespace,
+			Origin:    origin,
 			Message:   message,
 			Metadata:  metadata,
 		})
@@ -122,6 +126,7 @@ func runNotesAdd(cmd *cobra.Command, args []string) error {
 		err = db.InsertNote(database.Note{
 			PURL:      purl,
 			Namespace: namespace,
+			Origin:    origin,
 			Message:   message,
 			Metadata:  metadata,
 		})
@@ -138,6 +143,7 @@ func runNotesAppend(cmd *cobra.Command, args []string) error {
 	purl := args[0]
 	message, _ := cmd.Flags().GetString("message")
 	namespace, _ := cmd.Flags().GetString("namespace")
+	origin, _ := cmd.Flags().GetString("origin")
 	setPairs, _ := cmd.Flags().GetStringArray("set")
 
 	metadata, err := parseMetadata(setPairs)
@@ -151,7 +157,7 @@ func runNotesAppend(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = db.Close() }()
 
-	if err := db.AppendNote(purl, namespace, message, metadata); err != nil {
+	if err := db.AppendNote(purl, namespace, origin, message, metadata); err != nil {
 		return fmt.Errorf("appending note: %w", err)
 	}
 
@@ -219,6 +225,9 @@ func runNotesList(cmd *cobra.Command, args []string) error {
 			line := n.PURL
 			if n.Namespace != "" {
 				line += " [" + n.Namespace + "]"
+			}
+			if n.Origin != "" && n.Origin != "git-pkgs" {
+				line += " (origin: " + n.Origin + ")"
 			}
 			if n.Message != "" {
 				first := strings.SplitN(n.Message, "\n", 2)[0]
@@ -292,6 +301,9 @@ func outputNoteText(cmd *cobra.Command, n *database.Note) error {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "PURL: %s\n", n.PURL)
 	if n.Namespace != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Namespace: %s\n", n.Namespace)
+	}
+	if n.Origin != "" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Origin: %s\n", n.Origin)
 	}
 	if n.Message != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n%s\n", n.Message)

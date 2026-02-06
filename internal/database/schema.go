@@ -158,6 +158,7 @@ func (db *DB) CreateSchema() error {
 		id INTEGER PRIMARY KEY,
 		purl TEXT NOT NULL,
 		namespace TEXT NOT NULL DEFAULT '',
+		origin TEXT NOT NULL DEFAULT 'git-pkgs',
 		message TEXT,
 		metadata TEXT,
 		created_at DATETIME,
