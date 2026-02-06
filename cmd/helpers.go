@@ -50,7 +50,7 @@ func shortSHA(sha string) string {
 }
 
 func isResolvedDependency(d database.Dependency) bool {
-	return d.Requirement != "" && (d.ManifestKind == "lockfile" || d.Ecosystem == "Go")
+	return d.Requirement != "" && (d.ManifestKind == "lockfile" || d.Ecosystem == "golang")
 }
 
 func filterByEcosystem(deps []database.Dependency, ecosystem string) []database.Dependency {

@@ -683,7 +683,7 @@ func (db *DB) GetStaleDependencies(branchID int64, ecosystem string, days int) (
 			JOIN branch_commits bc ON bc.commit_id = ds.commit_id
 			WHERE bc.branch_id = ?
 			AND bc.position = (SELECT MAX(position) FROM branch_commits WHERE branch_id = ?)
-			AND m.kind = 'lockfile'
+			AND (m.kind = 'lockfile' OR (m.kind = 'manifest' AND m.ecosystem = 'golang'))
 		),
 		last_changed AS (
 			SELECT dc.name, m.path, MAX(c.committed_at) as last_changed
@@ -1581,7 +1581,7 @@ func (db *DB) GetVulnSyncStatus(branchID int64) ([]VulnSyncStatus, error) {
 		JOIN branch_commits bc ON bc.commit_id = ds.commit_id
 		JOIN manifests m ON m.id = ds.manifest_id
 		WHERE bc.branch_id = ?
-		AND m.kind = 'lockfile'
+		AND (m.kind = 'lockfile' OR (m.kind = 'manifest' AND m.ecosystem = 'golang'))
 		AND ds.ecosystem IS NOT NULL AND ds.ecosystem != ''
 		ORDER BY ds.ecosystem, ds.name
 	`, branchID)
@@ -1705,7 +1705,7 @@ func (db *DB) GetVulnerabilityStats(branchID int64) (map[string]int, error) {
 		JOIN manifests m ON m.id = ds.manifest_id
 		WHERE bc.branch_id = ?
 		AND bc.position = (SELECT MAX(position) FROM branch_commits WHERE branch_id = ?)
-		AND m.kind = 'lockfile'
+		AND (m.kind = 'lockfile' OR (m.kind = 'manifest' AND m.ecosystem = 'golang'))
 		GROUP BY v.severity
 	`, branchID, branchID)
 	if err != nil {
