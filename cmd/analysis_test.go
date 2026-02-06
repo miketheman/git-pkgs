@@ -3,6 +3,9 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -861,6 +864,68 @@ func TestStaleCommand(t *testing.T) {
 		first := result[0]
 		if _, ok := first["name"]; !ok {
 			t.Error("expected 'name' field in stale JSON")
+		}
+	})
+
+	t.Run("computes days since correctly for old commits", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+
+		// Create lockfile with a backdated commit (90 days ago)
+		fullPath := filepath.Join(repoDir, "package-lock.json")
+		if err := os.WriteFile(fullPath, []byte(packageLockJSON), 0644); err != nil {
+			t.Fatal(err)
+		}
+		gitCmd := exec.Command("git", "add", "package-lock.json")
+		gitCmd.Dir = repoDir
+		if err := gitCmd.Run(); err != nil {
+			t.Fatal(err)
+		}
+		gitCmd = exec.Command("git", "commit", "-m", "Add lockfile")
+		gitCmd.Dir = repoDir
+		gitCmd.Env = append(os.Environ(),
+			"GIT_COMMITTER_DATE=2020-01-01T00:00:00Z",
+			"GIT_AUTHOR_DATE=2020-01-01T00:00:00Z",
+		)
+		if err := gitCmd.Run(); err != nil {
+			t.Fatal(err)
+		}
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"init"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		var stdout bytes.Buffer
+		rootCmd = cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"stale", "--days", "0", "--format", "json"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("stale failed: %v", err)
+		}
+
+		var result []map[string]interface{}
+		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+
+		if len(result) == 0 {
+			t.Fatal("expected stale packages")
+		}
+
+		// The commit is from 2020, so days_since should be well over 1000
+		for _, entry := range result {
+			days, ok := entry["days_since"].(float64)
+			if !ok {
+				t.Fatalf("days_since not a number: %v", entry["days_since"])
+			}
+			if days < 1000 {
+				t.Errorf("expected days_since > 1000 for a 2020 commit, got %v for %v", days, entry["name"])
+			}
 		}
 	})
 }
