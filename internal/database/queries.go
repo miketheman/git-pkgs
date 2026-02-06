@@ -2093,6 +2093,36 @@ func (db *DB) ListNotes(namespace, purlFilter string) ([]Note, error) {
 	return notes, rows.Err()
 }
 
+type NamespaceCount struct {
+	Namespace string `json:"namespace"`
+	Count     int    `json:"count"`
+}
+
+func (db *DB) ListNoteNamespaces(purlFilter string) ([]NamespaceCount, error) {
+	query := "SELECT namespace, COUNT(*) as count FROM notes"
+	var args []any
+	if purlFilter != "" {
+		query += " WHERE purl LIKE ?"
+		args = append(args, "%"+purlFilter+"%")
+	}
+	query += " GROUP BY namespace ORDER BY count DESC, namespace"
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []NamespaceCount
+	for rows.Next() {
+		var nc NamespaceCount
+		if err := rows.Scan(&nc.Namespace, &nc.Count); err != nil {
+			return nil, err
+		}
+		results = append(results, nc)
+	}
+	return results, rows.Err()
+}
+
 func (db *DB) DeleteNote(purl, namespace string) error {
 	result, err := db.Exec("DELETE FROM notes WHERE purl = ? AND namespace = ?", purl, namespace)
 	if err != nil {

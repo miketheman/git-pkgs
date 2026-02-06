@@ -71,7 +71,16 @@ notes (e.g. "security", "audit", "review"). The default namespace is empty.`,
 	}
 	removeCmd.Flags().String("namespace", "", "Note namespace to remove")
 
-	notesCmd.AddCommand(addCmd, appendCmd, showCmd, listCmd, removeCmd)
+	namespacesCmd := &cobra.Command{
+		Use:   "namespaces",
+		Short: "List note namespaces",
+		Long:  `Show all namespaces in use with the number of notes in each.`,
+		RunE:  runNotesNamespaces,
+	}
+	namespacesCmd.Flags().String("purl-filter", "", "Filter by purl substring")
+	namespacesCmd.Flags().StringP("format", "f", "text", "Output format: text, json")
+
+	notesCmd.AddCommand(addCmd, appendCmd, showCmd, listCmd, removeCmd, namespacesCmd)
 	parent.AddCommand(notesCmd)
 }
 
@@ -240,6 +249,43 @@ func runNotesRemove(cmd *cobra.Command, args []string) error {
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Removed note for %s\n", purl)
 	return nil
+}
+
+func runNotesNamespaces(cmd *cobra.Command, args []string) error {
+	purlFilter, _ := cmd.Flags().GetString("purl-filter")
+	format, _ := cmd.Flags().GetString("format")
+
+	_, db, err := openDatabase()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	namespaces, err := db.ListNoteNamespaces(purlFilter)
+	if err != nil {
+		return fmt.Errorf("listing namespaces: %w", err)
+	}
+
+	if len(namespaces) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No notes found.")
+		return nil
+	}
+
+	switch format {
+	case "json":
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(namespaces)
+	default:
+		for _, ns := range namespaces {
+			name := ns.Namespace
+			if name == "" {
+				name = "(default)"
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-20s %d notes\n", name, ns.Count)
+		}
+		return nil
+	}
 }
 
 func outputNoteText(cmd *cobra.Command, n *database.Note) error {
