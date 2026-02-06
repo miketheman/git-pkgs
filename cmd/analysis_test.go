@@ -3,6 +3,7 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -861,6 +862,55 @@ func TestStaleCommand(t *testing.T) {
 		first := result[0]
 		if _, ok := first["name"]; !ok {
 			t.Error("expected 'name' field in stale JSON")
+		}
+	})
+
+	t.Run("includes go.mod dependencies", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+
+		goMod, err := os.ReadFile("testdata/ades-go.mod")
+		if err != nil {
+			t.Fatalf("failed to read fixture: %v", err)
+		}
+		addFileAndCommit(t, repoDir, "go.mod", string(goMod), "Add go.mod")
+
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		rootCmd := cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"init"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		var stdout bytes.Buffer
+		rootCmd = cmd.NewRootCmd()
+		rootCmd.SetArgs([]string{"stale", "--days", "0", "--format", "json"})
+		rootCmd.SetOut(&stdout)
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("stale failed: %v", err)
+		}
+
+		var result []map[string]interface{}
+		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+
+		if len(result) == 0 {
+			t.Fatal("expected Go dependencies in stale output, got none")
+		}
+
+		// Verify a known go.mod dependency appears
+		found := false
+		for _, entry := range result {
+			if name, ok := entry["name"].(string); ok && name == "golang.org/x/mod" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected golang.org/x/mod in stale output")
 		}
 	})
 }
