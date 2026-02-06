@@ -3,22 +3,22 @@ package cmd
 import (
 	"testing"
 
-	"github.com/git-pkgs/git-pkgs/internal/osv"
+	"github.com/git-pkgs/vulns"
 )
 
 func TestBuildVersRange(t *testing.T) {
 	tests := []struct {
 		name      string
-		ranges    []osv.Range
+		ranges    []vulns.Range
 		ecosystem string
 		want      string
 	}{
 		{
 			name: "single introduced/fixed pair",
-			ranges: []osv.Range{
+			ranges: []vulns.Range{
 				{
 					Type: "ECOSYSTEM",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "1.0.0"},
 						{Fixed: "1.5.0"},
 					},
@@ -29,10 +29,10 @@ func TestBuildVersRange(t *testing.T) {
 		},
 		{
 			name: "multiple introduced/fixed pairs in one range",
-			ranges: []osv.Range{
+			ranges: []vulns.Range{
 				{
 					Type: "ECOSYSTEM",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "1.0.0"},
 						{Fixed: "1.5.0"},
 						{Introduced: "2.0.0"},
@@ -45,10 +45,10 @@ func TestBuildVersRange(t *testing.T) {
 		},
 		{
 			name: "introduced from zero with fix",
-			ranges: []osv.Range{
+			ranges: []vulns.Range{
 				{
 					Type: "ECOSYSTEM",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "0"},
 						{Fixed: "1.2.0"},
 					},
@@ -59,10 +59,10 @@ func TestBuildVersRange(t *testing.T) {
 		},
 		{
 			name: "introduced from zero then reintroduced",
-			ranges: []osv.Range{
+			ranges: []vulns.Range{
 				{
 					Type: "ECOSYSTEM",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "0"},
 						{Fixed: "1.2.0"},
 						{Introduced: "2.0.0"},
@@ -75,10 +75,10 @@ func TestBuildVersRange(t *testing.T) {
 		},
 		{
 			name: "lastAffected instead of fixed",
-			ranges: []osv.Range{
+			ranges: []vulns.Range{
 				{
 					Type: "ECOSYSTEM",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "1.0.0"},
 						{LastAffected: "1.9.9"},
 					},
@@ -89,10 +89,10 @@ func TestBuildVersRange(t *testing.T) {
 		},
 		{
 			name: "no upper bound",
-			ranges: []osv.Range{
+			ranges: []vulns.Range{
 				{
 					Type: "ECOSYSTEM",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "3.0.0"},
 					},
 				},
@@ -102,10 +102,10 @@ func TestBuildVersRange(t *testing.T) {
 		},
 		{
 			name: "all versions affected (introduced 0 with no fix)",
-			ranges: []osv.Range{
+			ranges: []vulns.Range{
 				{
 					Type: "ECOSYSTEM",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "0"},
 					},
 				},
@@ -115,17 +115,17 @@ func TestBuildVersRange(t *testing.T) {
 		},
 		{
 			name: "multiple ranges",
-			ranges: []osv.Range{
+			ranges: []vulns.Range{
 				{
 					Type: "ECOSYSTEM",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "1.0.0"},
 						{Fixed: "1.1.0"},
 					},
 				},
 				{
 					Type: "ECOSYSTEM",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "2.0.0"},
 						{Fixed: "2.1.0"},
 					},
@@ -136,16 +136,16 @@ func TestBuildVersRange(t *testing.T) {
 		},
 		{
 			name:      "empty ranges",
-			ranges:    []osv.Range{},
+			ranges:    []vulns.Range{},
 			ecosystem: "npm",
 			want:      "",
 		},
 		{
 			name: "skip GIT range type",
-			ranges: []osv.Range{
+			ranges: []vulns.Range{
 				{
 					Type: "GIT",
-					Events: []osv.Event{
+					Events: []vulns.Event{
 						{Introduced: "abc123"},
 						{Fixed: "def456"},
 					},
@@ -158,7 +158,16 @@ func TestBuildVersRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildVersRange(tt.ranges, tt.ecosystem)
+			v := &vulns.Vulnerability{
+				Affected: []vulns.Affected{{
+					Package: vulns.Package{
+						Ecosystem: tt.ecosystem,
+						Name:      "test-pkg",
+					},
+					Ranges: tt.ranges,
+				}},
+			}
+			got := buildVersRange(v, tt.ecosystem, "test-pkg")
 			if got != tt.want {
 				t.Errorf("buildVersRange() = %q, want %q", got, tt.want)
 			}
