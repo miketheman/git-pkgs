@@ -228,7 +228,7 @@ func (w *BatchWriter) insertCommits(tx *sql.Tx, now time.Time) error {
 			if pc.hasChanges {
 				hasChanges = 1
 			}
-			args = append(args, pc.info.SHA, pc.info.Message, pc.info.AuthorName, pc.info.AuthorEmail, pc.info.CommittedAt, hasChanges, now, now)
+			args = append(args, pc.info.SHA, pc.info.Message, pc.info.AuthorName, pc.info.AuthorEmail, pc.info.CommittedAt.UTC().Format("2006-01-02 15:04:05"), hasChanges, now, now)
 		}
 
 		if _, err := tx.Exec(sb.String(), args...); err != nil {
