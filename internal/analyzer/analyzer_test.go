@@ -517,13 +517,19 @@ func TestDependenciesInWorkingDirIgnoresSubmodules(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should only see rails from the root Gemfile, not dependencies from submodules
-	if len(deps) != 1 {
-		t.Fatalf("expected 1 dependency, got %d: %+v", len(deps), deps)
+	// Should see rails from root Gemfile + 2 submodules from .gitmodules, but not manifests inside submodule dirs
+	if len(deps) != 3 {
+		t.Fatalf("expected 3 dependencies, got %d: %+v", len(deps), deps)
 	}
 
-	if deps[0].Name != "rails" {
-		t.Errorf("expected rails, got %s", deps[0].Name)
+	names := make(map[string]bool)
+	for _, dep := range deps {
+		names[dep.Name] = true
+	}
+	for _, expected := range []string{"rails", "vendor/lib", "external/tool"} {
+		if !names[expected] {
+			t.Errorf("expected %s dependency", expected)
+		}
 	}
 }
 
@@ -577,18 +583,18 @@ func TestDependenciesInWorkingDirIncludesSubmodules(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should see all dependencies including those from submodules
-	if len(deps) != 3 {
-		t.Fatalf("expected 3 dependencies, got %d: %+v", len(deps), deps)
+	// Should see all dependencies including those from submodules + .gitmodules entries
+	if len(deps) != 5 {
+		t.Fatalf("expected 5 dependencies, got %d: %+v", len(deps), deps)
 	}
 
-	// Verify we have deps from all three manifests
+	// Verify we have deps from all manifests
 	names := make(map[string]bool)
 	for _, dep := range deps {
 		names[dep.Name] = true
 	}
 
-	expected := []string{"rails", "sinatra", "lodash"}
+	expected := []string{"rails", "sinatra", "lodash", "vendor/lib", "external/tool"}
 	for _, name := range expected {
 		if !names[name] {
 			t.Errorf("expected to find %s in dependencies", name)
