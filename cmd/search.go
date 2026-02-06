@@ -11,11 +11,12 @@ import (
 
 func addSearchCmd(parent *cobra.Command) {
 	searchCmd := &cobra.Command{
-		Use:   "search <pattern>",
-		Short: "Find dependencies matching a pattern",
-		Long:  `Search for dependencies whose names match the given pattern.`,
-		Args:  cobra.ExactArgs(1),
-		RunE:  runSearch,
+		Use:     "search <pattern>",
+		Aliases: []string{"grep"},
+		Short:   "Find dependencies matching a pattern",
+		Long:    `Search for dependencies whose names match the given pattern.`,
+		Args:    cobra.ExactArgs(1),
+		RunE:    runSearch,
 	}
 
 	searchCmd.Flags().StringP("ecosystem", "e", "", "Filter by ecosystem")
