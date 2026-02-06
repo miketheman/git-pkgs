@@ -16,8 +16,9 @@ import (
 
 func addWhereCmd(parent *cobra.Command) {
 	whereCmd := &cobra.Command{
-		Use:   "where <package>",
-		Short: "Find where a package is declared",
+		Use:     "where <package>",
+		Aliases: []string{"find"},
+		Short:   "Find where a package is declared",
 		Long: `Search manifest files for a package declaration.
 Shows the file path, line number, and content.`,
 		Args: cobra.ExactArgs(1),
