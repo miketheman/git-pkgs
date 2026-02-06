@@ -21,9 +21,10 @@ var severityOrder = map[string]int{"critical": 0, "high": 1, "medium": 2, "low":
 
 func addVulnsCmd(parent *cobra.Command) {
 	vulnsCmd := &cobra.Command{
-		Use:   "vulns",
-		Short: "Vulnerability scanning commands",
-		Long:  `Commands for scanning dependencies for known vulnerabilities using OSV.`,
+		Use:     "vulns",
+		Aliases: []string{"audit"},
+		Short:   "Vulnerability scanning commands",
+		Long:    `Commands for scanning dependencies for known vulnerabilities using OSV.`,
 	}
 
 	addVulnsSyncCmd(vulnsCmd)

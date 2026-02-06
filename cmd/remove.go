@@ -14,8 +14,9 @@ const defaultRemoveTimeout = 5 * time.Minute
 
 func addRemoveCmd(parent *cobra.Command) {
 	removeCmd := &cobra.Command{
-		Use:   "remove <package>",
-		Short: "Remove a dependency",
+		Use:     "remove <package>",
+		Aliases: []string{"rm"},
+		Short:   "Remove a dependency",
 		Long: `Remove a package dependency using the detected package manager.
 Detects the package manager from lockfiles in the current directory
 and runs the appropriate remove command.

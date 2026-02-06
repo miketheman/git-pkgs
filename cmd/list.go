@@ -12,8 +12,9 @@ import (
 
 func addListCmd(parent *cobra.Command) {
 	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List dependencies at a commit",
+		Use:     "list",
+		Aliases: []string{"ls"},
+		Short:   "List dependencies at a commit",
 		Long: `List all dependencies at a specific commit.
 Defaults to HEAD if no commit is specified.`,
 		RunE: runList,
