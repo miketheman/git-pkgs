@@ -130,7 +130,7 @@ Installation configures `diff.pkgs.textconv` in git config and adds patterns to 
 
 ## Vulnerability Scanning
 
-The `vulns` command checks dependencies against [OSV](https://osv.dev). The `internal/osv` package wraps the OSV REST API, using batch queries to check multiple packages per request.
+The `vulns` command checks dependencies against [OSV](https://osv.dev) using the [`github.com/git-pkgs/vulns`](https://github.com/git-pkgs/vulns) library, which wraps the OSV REST API with batch queries to check multiple packages per request.
 
 Vulnerability data is cached in the database with a 24-hour TTL. The scan process:
 
