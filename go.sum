@@ -34,12 +34,14 @@ github.com/elazarl/goproxy v1.7.2 h1:Y2o6urb7Eule09PjlhQRGNsqRfPmYI3KKQLFpCAV3+o
 github.com/elazarl/goproxy v1.7.2/go.mod h1:82vkLNir0ALaW14Rc399OTTjyNREgmdL2cVoIbS6XaE=
 github.com/emirpasic/gods v1.18.1 h1:FXtiHYKDGKCW2KzwZKx0iC0PQmdlorYgdFG9jPXJ1Bc=
 github.com/emirpasic/gods v1.18.1/go.mod h1:8tpGGwCnJ5H4r6BWwaV6OrWmMoPhUl5jm/FMNAnJvWQ=
+github.com/git-pkgs/enrichment v0.1.0 h1:t7Zya45Dkjh8a1ULQ4lEY8UqvKHnM63nrhdIm79smDg=
+github.com/git-pkgs/enrichment v0.1.0/go.mod h1:xdy8+jZ5TCbYwG/LOPD1QBkjzpRlE5Wuv4//guXrGjw=
 github.com/git-pkgs/managers v0.4.0 h1:ydsy8Hq4UpHYrrr33swkfJiR+0HFsFOdlOktsrsaAbY=
 github.com/git-pkgs/managers v0.4.0/go.mod h1:K6B5Z8vd6tfywKzi2JgOB1eDFevmT4F9wxk4Q3VCWXQ=
 github.com/git-pkgs/manifests v0.3.4 h1:274YXdkREKjo36KCWKlIpUKtsw5I2AgjDxu7kiaBAPI=
 github.com/git-pkgs/manifests v0.3.4/go.mod h1:Fp08VXq28FfRVlnHhKTmLjTA1dLCmexfS1asNLgECRY=
-github.com/git-pkgs/purl v0.1.4 h1:FtyjLvADc23JizKHD43OtWsihU1GU5qVnMaT1aBnOqg=
-github.com/git-pkgs/purl v0.1.4/go.mod h1:2lthcr/s+JtSz1KV/M2gp3L98aGx0OqwQ7+23JNokIk=
+github.com/git-pkgs/purl v0.1.5 h1:OsOHkhFPEzVaro+mtEajlYn88vRuRF34wtH5JtLaXH0=
+github.com/git-pkgs/purl v0.1.5/go.mod h1:4RPpP/nJBGljfUiSpyIcFsieXLUahEoH0gSwjWfjhUQ=
 github.com/git-pkgs/registries v0.2.3 h1:KE9QQr+aqO06Jqb2lEfwFJ0Alimfdqmgs/QfgxIh0YU=
 github.com/git-pkgs/registries v0.2.3/go.mod h1:nXiMNoaCum0Sx3ltao5X9JNbR35ujlKMMN+vX8GLgt8=
 github.com/git-pkgs/spdx v0.1.0 h1:kBcB2iIc3A8qSAU/MtqywKslEo+FRct2daFLX+pwZdU=
