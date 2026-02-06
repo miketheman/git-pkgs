@@ -55,6 +55,23 @@ $ git pkgs notes list --namespace security
 pkg:npm/lodash [security] - no known issues
 ```
 
+See which namespaces are in use:
+
+```
+$ git pkgs notes namespaces
+security             2 notes
+audit                1 notes
+(default)            1 notes
+```
+
+You can scope this to a specific package with `--purl-filter`:
+
+```
+$ git pkgs notes namespaces --purl-filter lodash
+security             1 notes
+audit                1 notes
+```
+
 ## Metadata
 
 The `--set key=value` flag stores structured key-value pairs as JSON. Append merges new keys into existing metadata without removing old ones.
@@ -84,6 +101,7 @@ append <purl>  Append message text and merge metadata (creates if missing)
 show <purl>    Display a note
 list           List all notes
 remove <purl>  Delete a note
+namespaces     List namespaces with note counts
 ```
 
 Common flags:
