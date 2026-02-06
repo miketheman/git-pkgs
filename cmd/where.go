@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/git-pkgs/manifests"
@@ -150,6 +151,11 @@ func searchFileForPackage(path, relPath, packageName, ecosystem string, contextL
 	var matches []WhereMatch
 	var lines []string
 
+	// Case-insensitive search with non-alphanumeric boundaries to avoid matching inside hashes.
+	// We can't use \b because package names may start/end with non-word chars (e.g. @scope/pkg).
+	quoted := regexp.QuoteMeta(packageName)
+	re := regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9])` + quoted + `(?:$|[^A-Za-z0-9])`)
+
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
 
@@ -158,8 +164,7 @@ func searchFileForPackage(path, relPath, packageName, ecosystem string, contextL
 		line := scanner.Text()
 		lines = append(lines, line)
 
-		// Case-insensitive search for the package name
-		if strings.Contains(strings.ToLower(line), strings.ToLower(packageName)) {
+		if re.MatchString(line) {
 			match := WhereMatch{
 				FilePath:   relPath,
 				LineNumber: lineNum,
