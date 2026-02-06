@@ -196,7 +196,7 @@ func (w *Writer) InsertCommit(info CommitInfo, hasChanges bool) (int64, bool, er
 		info.Message,
 		info.AuthorName,
 		info.AuthorEmail,
-		info.CommittedAt,
+		info.CommittedAt.UTC().Format("2006-01-02 15:04:05"),
 		hasChangesInt,
 		now,
 		now,

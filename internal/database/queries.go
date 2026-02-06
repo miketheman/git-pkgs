@@ -696,7 +696,7 @@ func (db *DB) GetStaleDependencies(branchID int64, ecosystem string, days int) (
 		)
 		SELECT cd.name, cd.ecosystem, cd.requirement, cd.path,
 		       COALESCE(lc.last_changed, '') as last_changed,
-		       CAST(julianday('now') - julianday(COALESCE(lc.last_changed, '2000-01-01')) AS INTEGER) as days_since
+		       CAST(julianday('now') - julianday(substr(COALESCE(lc.last_changed, '2000-01-01'), 1, 19)) AS INTEGER) as days_since
 		FROM current_deps cd
 		LEFT JOIN last_changed lc ON lc.name = cd.name AND lc.path = cd.path
 	`
@@ -713,7 +713,7 @@ func (db *DB) GetStaleDependencies(branchID int64, ecosystem string, days int) (
 		} else {
 			query += " WHERE"
 		}
-		query += " CAST(julianday('now') - julianday(COALESCE(lc.last_changed, '2000-01-01')) AS INTEGER) >= ?"
+		query += " CAST(julianday('now') - julianday(substr(COALESCE(lc.last_changed, '2000-01-01'), 1, 19)) AS INTEGER) >= ?"
 		args = append(args, days)
 	}
 
