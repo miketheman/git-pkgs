@@ -426,6 +426,16 @@ Gemfile.lock:142:    rails (7.0.8)
 
 Like `grep` but scoped to manifest files that git-pkgs knows about.
 
+### Search dependencies
+
+```bash
+git pkgs search rails            # find dependencies matching a pattern
+git pkgs search react --ecosystem=npm
+git pkgs search "^post" --direct # only direct dependencies, not lockfile
+```
+
+Searches the database for dependencies whose names match the given pattern. Shows the matching name, version requirement, ecosystem, and when the dependency was first seen and last changed.
+
 ### List commits with dependency changes
 
 ```bash
@@ -572,6 +582,17 @@ eval "$(git pkgs completions zsh)"
 # Or auto-install to standard completion directories
 git pkgs completions install
 ```
+
+### Aliases
+
+Common commands have shorter alternatives:
+
+- `ls` for `list`
+- `rm` for `remove`
+- `grep` for `search`
+- `find` for `where`
+- `audit` for `vulns`
+- `praise` for `blame`
 
 ## Configuration
 
