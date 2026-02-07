@@ -505,6 +505,153 @@ func TestNotesNamespaces(t *testing.T) {
 	})
 }
 
+func TestNotesOrigin(t *testing.T) {
+	t.Run("default origin is git-pkgs", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		_, _, err := runCmd(t, "init")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		_, _, err = runCmd(t, "notes", "add", "pkg:npm/lodash", "-m", "test note")
+		if err != nil {
+			t.Fatalf("add failed: %v", err)
+		}
+
+		stdout, _, err := runCmd(t, "notes", "show", "pkg:npm/lodash", "-f", "json")
+		if err != nil {
+			t.Fatalf("show failed: %v", err)
+		}
+
+		var note database.Note
+		if err := json.Unmarshal([]byte(stdout), &note); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+		if note.Origin != "git-pkgs" {
+			t.Errorf("expected origin 'git-pkgs', got: %s", note.Origin)
+		}
+	})
+
+	t.Run("custom origin persists", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		_, _, err := runCmd(t, "init")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		_, _, err = runCmd(t, "notes", "add", "pkg:npm/lodash", "-m", "from scanner", "--origin", "snyk")
+		if err != nil {
+			t.Fatalf("add failed: %v", err)
+		}
+
+		stdout, _, err := runCmd(t, "notes", "show", "pkg:npm/lodash", "-f", "json")
+		if err != nil {
+			t.Fatalf("show failed: %v", err)
+		}
+
+		var note database.Note
+		if err := json.Unmarshal([]byte(stdout), &note); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+		if note.Origin != "snyk" {
+			t.Errorf("expected origin 'snyk', got: %s", note.Origin)
+		}
+	})
+
+	t.Run("origin shown in text output", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		_, _, err := runCmd(t, "init")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		_, _, err = runCmd(t, "notes", "add", "pkg:npm/lodash", "-m", "test", "--origin", "custom-tool")
+		if err != nil {
+			t.Fatalf("add failed: %v", err)
+		}
+
+		stdout, _, err := runCmd(t, "notes", "show", "pkg:npm/lodash")
+		if err != nil {
+			t.Fatalf("show failed: %v", err)
+		}
+		if !strings.Contains(stdout, "Origin: custom-tool") {
+			t.Errorf("expected 'Origin: custom-tool' in output, got: %s", stdout)
+		}
+	})
+
+	t.Run("custom origin shown in list output", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		_, _, err := runCmd(t, "init")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		_, _, err = runCmd(t, "notes", "add", "pkg:npm/lodash", "-m", "test", "--origin", "external")
+		if err != nil {
+			t.Fatalf("add failed: %v", err)
+		}
+
+		stdout, _, err := runCmd(t, "notes", "list")
+		if err != nil {
+			t.Fatalf("list failed: %v", err)
+		}
+		if !strings.Contains(stdout, "(origin: external)") {
+			t.Errorf("expected '(origin: external)' in list output, got: %s", stdout)
+		}
+	})
+
+	t.Run("append preserves existing origin", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
+		cleanup := chdir(t, repoDir)
+		defer cleanup()
+
+		_, _, err := runCmd(t, "init")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		_, _, err = runCmd(t, "notes", "add", "pkg:npm/lodash", "-m", "initial", "--origin", "snyk")
+		if err != nil {
+			t.Fatalf("add failed: %v", err)
+		}
+
+		_, _, err = runCmd(t, "notes", "append", "pkg:npm/lodash", "-m", "more info")
+		if err != nil {
+			t.Fatalf("append failed: %v", err)
+		}
+
+		stdout, _, err := runCmd(t, "notes", "show", "pkg:npm/lodash", "-f", "json")
+		if err != nil {
+			t.Fatalf("show failed: %v", err)
+		}
+
+		var note database.Note
+		if err := json.Unmarshal([]byte(stdout), &note); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+		if note.Origin != "snyk" {
+			t.Errorf("expected origin 'snyk' preserved after append, got: %s", note.Origin)
+		}
+	})
+}
+
 func TestNotesNamespace(t *testing.T) {
 	t.Run("same purl different namespaces", func(t *testing.T) {
 		repoDir := createTestRepo(t)
