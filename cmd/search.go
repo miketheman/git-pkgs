@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/git-pkgs/git-pkgs/internal/database"
-	"github.com/git-pkgs/git-pkgs/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -31,19 +30,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	directOnly, _ := cmd.Flags().GetBool("direct")
 	format, _ := cmd.Flags().GetString("format")
 
-	repo, err := git.OpenRepository(".")
+	_, db, err := openDatabase()
 	if err != nil {
-		return fmt.Errorf("not in a git repository: %w", err)
-	}
-
-	dbPath := repo.DatabasePath()
-	if !database.Exists(dbPath) {
-		return fmt.Errorf("database not found. Run 'git pkgs init' first")
-	}
-
-	db, err := database.Open(dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
+		return err
 	}
 	defer func() { _ = db.Close() }()
 
