@@ -10,11 +10,11 @@ The tool works with two types of data. Intrinsic data comes from your git histor
 cmd/                    CLI commands (cobra)
 internal/
   analyzer/             Manifest parsing and change detection
+  bisect/               Binary search state management
   database/             SQLite layer (queries, schema, batch writer)
-  enrichment/           Package metadata fetching (ecosyste.ms or direct registry)
   git/                  Repository wrapper (go-git)
   indexer/              Orchestrates history walking
-  osv/                  OSV API client
+  mailmap/              Git mailmap support
 ```
 
 ## Entry Point
@@ -25,7 +25,7 @@ The CLI uses [cobra](https://github.com/spf13/cobra). Each command is registered
 
 `internal/database` manages the SQLite connection using [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) (pure Go, no CGO). The database path defaults to `.git/pkgs.sqlite3` but can be overridden with `GIT_PKGS_DB`.
 
-The schema has ten tables. Six handle dependency tracking:
+The schema has eleven tables. Six handle dependency tracking:
 
 - `commits` holds commit metadata plus a flag indicating whether it changed dependencies
 - `branches` tracks which branches have been analyzed and their last processed SHA
@@ -34,12 +34,16 @@ The schema has ten tables. Six handle dependency tracking:
 - `dependency_changes` records every add, modify, or remove event
 - `dependency_snapshots` stores full dependency state at intervals, including lockfile integrity hashes
 
-Four more support vulnerability scanning and package enrichment:
+Four support vulnerability scanning and package enrichment:
 
 - `packages` caches package metadata and vulnerability sync status
 - `versions` stores per-version metadata (license, published date) for time-travel queries
 - `vulnerabilities` caches CVE/GHSA data fetched from OSV
 - `vulnerability_packages` maps which packages are affected by each vulnerability
+
+One more stores package annotations:
+
+- `notes` stores user-attached metadata and messages keyed on (purl, namespace)
 
 See [schema.md](schema.md) for the full schema.
 
@@ -146,7 +150,7 @@ See [vulns.md](vulns.md) for command documentation.
 
 ## Package Enrichment
 
-The `outdated`, `licenses`, `sbom`, and `integrity --registry` commands fetch metadata from external sources. The `internal/enrichment` package provides a unified interface with two backends:
+The `outdated`, `licenses`, `sbom`, and `integrity --registry` commands fetch metadata from external sources. The [`github.com/git-pkgs/enrichment`](https://github.com/git-pkgs/enrichment) library provides a unified interface with two backends:
 
 - **ecosyste.ms** - Bulk API queries via [ecosyste-ms/ecosystems-go](https://github.com/ecosyste-ms/ecosystems-go). Efficient for public packages.
 - **registries** - Direct queries to package registries via [git-pkgs/registries](https://github.com/git-pkgs/registries). Required for private registries.

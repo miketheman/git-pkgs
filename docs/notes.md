@@ -82,6 +82,7 @@ $ git pkgs notes show pkg:npm/lodash -f json
 {
   "purl": "pkg:npm/lodash",
   "namespace": "",
+  "origin": "git-pkgs",
   "message": "",
   "metadata": {
     "reviewer": "alice",
@@ -108,6 +109,7 @@ Common flags:
 
 ```
 --namespace=NAME   Categorize notes (default: empty)
+--origin=NAME      Tool or system that created this note (default: "git-pkgs")
 -m, --message=TEXT Freeform text content
 --set key=value    Structured metadata (repeatable)
 -f, --format=FMT   Output format: text, json

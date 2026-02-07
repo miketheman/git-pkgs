@@ -24,7 +24,8 @@ jobs:
           chmod +x git-pkgs
 
       - name: Show dependency changes
-        run: ./git-pkgs diff --from=origin/${{ github.base_ref }} --to=HEAD```
+        run: ./git-pkgs diff --from=origin/${{ github.base_ref }} --to=HEAD
+```
 
 ### Vulnerability scanning with SARIF
 
@@ -164,7 +165,8 @@ dependency-diff:
   script:
     - curl -sL https://github.com/git-pkgs/git-pkgs/releases/latest/download/git-pkgs-linux-amd64 -o git-pkgs
     - chmod +x git-pkgs
-    - ./git-pkgs diff --from=origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME --to=HEAD  rules:
+    - ./git-pkgs diff --from=origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME --to=HEAD
+  rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 ```
 
@@ -299,7 +301,7 @@ Cache the git-pkgs binary to speed up workflows:
 Use git-pkgs in a Dockerfile:
 
 ```dockerfile
-FROM golang:1.21 as builder
+FROM golang:1.25 as builder
 RUN curl -sL https://github.com/git-pkgs/git-pkgs/releases/latest/download/git-pkgs-linux-amd64 -o /usr/local/bin/git-pkgs \
     && chmod +x /usr/local/bin/git-pkgs
 

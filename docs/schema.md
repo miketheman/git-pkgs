@@ -111,7 +111,7 @@ Stores the complete dependency state at intervals. Enables fast queries for "wha
 | created_at | datetime | |
 | updated_at | datetime | |
 
-Indexes: `(commit_id, manifest_id, name)` (unique), `name`, `ecosystem`, `purl`
+Indexes: `(commit_id, manifest_id, name, requirement)` (unique), `name`, `ecosystem`, `purl`
 
 ### packages
 
@@ -192,6 +192,23 @@ Maps which packages are affected by each vulnerability.
 
 Indexes: `(ecosystem, package_name)`, `vulnerability_id`, `(vulnerability_id, ecosystem, package_name)` (unique)
 
+### notes
+
+Stores user-attached metadata and messages keyed on package PURLs.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | integer | Primary key |
+| purl | text | Package URL |
+| namespace | text | Namespace for categorization (default: empty string) |
+| origin | text | Tool or system that created this note (default: "git-pkgs") |
+| message | text | Freeform text content |
+| metadata | text | JSON-encoded key-value pairs |
+| created_at | datetime | |
+| updated_at | datetime | |
+
+Indexes: `(purl, namespace)` (unique), `namespace`
+
 ## Relationships
 
 ```
@@ -206,6 +223,8 @@ branches ──┬── branch_commits ──┬── commits
 packages ──── versions (via package_purl)
 
 vulnerabilities ──── vulnerability_packages
+
+notes (standalone, keyed on purl + namespace)
 ```
 
 ## Schema Versioning
