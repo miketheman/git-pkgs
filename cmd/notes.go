@@ -302,7 +302,7 @@ func outputNoteText(cmd *cobra.Command, n *database.Note) error {
 	if n.Namespace != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Namespace: %s\n", n.Namespace)
 	}
-	if n.Origin != "" {
+	if n.Origin != "" && n.Origin != "git-pkgs" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Origin: %s\n", n.Origin)
 	}
 	if n.Message != "" {
