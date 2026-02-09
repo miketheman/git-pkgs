@@ -602,6 +602,86 @@ func TestDependenciesInWorkingDirIncludesSubmodules(t *testing.T) {
 	}
 }
 
+func TestDependenciesInWorkingDirNegationGitignore(t *testing.T) {
+	repoDir := createTestRepo(t)
+
+	// First commit with a simple .gitignore, then update to deny-by-default
+	addFile(t, repoDir, "README.md", "# Test")
+	commit(t, repoDir, "Initial commit")
+
+	// Now write the deny-by-default .gitignore directly (don't git add it)
+	if err := os.WriteFile(filepath.Join(repoDir, ".gitignore"), []byte("/*\n!.github/\n!src/\n"), 0644); err != nil {
+		t.Fatalf("failed to write .gitignore: %v", err)
+	}
+
+	// Add manifest in allowed .github directory
+	if err := os.MkdirAll(filepath.Join(repoDir, ".github", "workflows"), 0755); err != nil {
+		t.Fatalf("failed to create dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, ".github", "workflows", "ci.yml"), []byte(`name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+`), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	// Add manifest in allowed src directory
+	if err := os.MkdirAll(filepath.Join(repoDir, "src"), 0755); err != nil {
+		t.Fatalf("failed to create dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "src", "Gemfile"), []byte(sampleGemfile(map[string]string{
+		"rails": "~> 7.0",
+	})), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	// Add manifest in ignored root (should be skipped)
+	if err := os.WriteFile(filepath.Join(repoDir, "Gemfile"), []byte(sampleGemfile(map[string]string{
+		"sinatra": "~> 3.0",
+	})), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	// Add manifest in ignored other directory (should be skipped)
+	if err := os.MkdirAll(filepath.Join(repoDir, "vendor"), 0755); err != nil {
+		t.Fatalf("failed to create dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "vendor", "Gemfile"), []byte(sampleGemfile(map[string]string{
+		"puma": "~> 6.0",
+	})), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	a := analyzer.New()
+	deps, err := a.DependenciesInWorkingDir(repoDir, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should see rails from src/Gemfile and actions/checkout from .github, but not sinatra or puma
+	names := make(map[string]bool)
+	for _, dep := range deps {
+		names[dep.Name] = true
+	}
+
+	if !names["rails"] {
+		t.Error("expected to find rails from src/Gemfile")
+	}
+	if !names["actions/checkout"] {
+		t.Errorf("expected to find actions/checkout from .github/workflows/ci.yml, got deps: %+v", deps)
+	}
+	if names["sinatra"] {
+		t.Error("expected sinatra from root Gemfile to be ignored")
+	}
+	if names["puma"] {
+		t.Error("expected puma from vendor/Gemfile to be ignored")
+	}
+}
+
 func TestAnalyzeCommitWithGitHubActionsWorkflow(t *testing.T) {
 	repoDir := createTestRepo(t)
 	addFile(t, repoDir, "README.md", "# Test")
@@ -689,6 +769,78 @@ jobs:
 	}
 	if ecosystems["gem"] != 1 {
 		t.Errorf("expected 1 gem dependency, got %d", ecosystems["gem"])
+	}
+}
+
+func TestAnalyzeCommitMultiVersionModified(t *testing.T) {
+	// When a lockfile has the same package at multiple versions and one version
+	// changes, PreviousRequirement should reflect the actual old version, not
+	// whichever version happened to be last in the map.
+	//
+	// Before: shared@2.0.0 (under dep-a) and shared@1.5.0 (under dep-b)
+	// After:  shared@2.1.0 (under dep-a) and shared@1.5.0 (under dep-b)
+	// Expected change: shared modified 2.0.0 -> 2.1.0
+	// Bug: beforeByName["shared"] = 1.5.0 (last wins), so PreviousRequirement = "1.5.0"
+	repoDir := createTestRepo(t)
+	addFile(t, repoDir, "README.md", "# Test")
+	commit(t, repoDir, "Initial commit")
+
+	before, err := os.ReadFile("testdata/multi-version-before.json")
+	if err != nil {
+		t.Fatalf("failed to read fixture: %v", err)
+	}
+	addFile(t, repoDir, "package-lock.json", string(before))
+	firstSha := commit(t, repoDir, "Add lockfile with shared@2.0.0 and shared@1.5.0")
+
+	after, err := os.ReadFile("testdata/multi-version-after.json")
+	if err != nil {
+		t.Fatalf("failed to read fixture: %v", err)
+	}
+	addFile(t, repoDir, "package-lock.json", string(after))
+	secondSha := commit(t, repoDir, "Update shared 2.0.0 -> 2.1.0")
+
+	repo := openRepo(t, repoDir)
+	a := analyzer.New()
+
+	firstHash := getCommit(t, repo, firstSha)
+	firstCommit, _ := repo.CommitObject(*firstHash)
+	firstResult, err := a.AnalyzeCommit(firstCommit, nil)
+	if err != nil {
+		t.Fatalf("analyzing first commit: %v", err)
+	}
+
+	secondHash := getCommit(t, repo, secondSha)
+	secondCommit, _ := repo.CommitObject(*secondHash)
+	result, err := a.AnalyzeCommit(secondCommit, firstResult.Snapshot)
+	if err != nil {
+		t.Fatalf("analyzing second commit: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	// Should have exactly one change: shared modified 2.0.0 -> 2.1.0
+	var modifiedChanges []analyzer.Change
+	for _, ch := range result.Changes {
+		if ch.ChangeType == "modified" {
+			modifiedChanges = append(modifiedChanges, ch)
+		}
+	}
+
+	if len(modifiedChanges) != 1 {
+		t.Fatalf("expected 1 modified change, got %d: %+v", len(modifiedChanges), result.Changes)
+	}
+
+	ch := modifiedChanges[0]
+	if ch.Name != "shared" {
+		t.Errorf("expected modified package 'shared', got %q", ch.Name)
+	}
+	if ch.PreviousRequirement != "2.0.0" {
+		t.Errorf("expected PreviousRequirement '2.0.0', got %q", ch.PreviousRequirement)
+	}
+	if ch.Requirement != "2.1.0" {
+		t.Errorf("expected Requirement '2.1.0', got %q", ch.Requirement)
 	}
 }
 
