@@ -39,7 +39,7 @@ func (m *mockEnrichmentClient) GetVersion(_ context.Context, _ string) (*enrichm
 // returns a mock, and returns a cleanup function to restore the original.
 func setMockEnrichment(packages map[string]*enrichment.PackageInfo) func() {
 	orig := cmd.NewEnrichmentClient
-	cmd.NewEnrichmentClient = func() (enrichment.Client, error) {
+	cmd.NewEnrichmentClient = func(opts ...enrichment.Option) (enrichment.Client, error) {
 		return &mockEnrichmentClient{packages: packages}, nil
 	}
 	return func() { cmd.NewEnrichmentClient = orig }

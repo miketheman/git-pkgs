@@ -123,7 +123,7 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Syncing vulnerabilities for %d packages...\n", len(uniquePkgs))
 	}
 
-	source := osv.New()
+	source := osv.New(osv.WithUserAgent("git-pkgs/" + version))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -377,7 +377,7 @@ func runVulnsScan(cmd *cobra.Command, args []string) error {
 }
 
 func scanLive(deps []database.Dependency, minSeverity int) ([]VulnResult, error) {
-	source := osv.New()
+	source := osv.New(osv.WithUserAgent("git-pkgs/" + version))
 	purls := make([]*purl.PURL, len(deps))
 	for i, d := range deps {
 		purls[i] = purl.MakePURL(d.Ecosystem, d.Name, d.Requirement)
@@ -708,7 +708,7 @@ func runVulnsShow(cmd *cobra.Command, args []string) error {
 	ref, _ := cmd.Flags().GetString("ref")
 	branchName, _ := cmd.Flags().GetString("branch")
 
-	source := osv.New()
+	source := osv.New(osv.WithUserAgent("git-pkgs/" + version))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -1451,7 +1451,7 @@ func runVulnsHistory(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting commits: %w", err)
 	}
 
-	source := osv.New()
+	source := osv.New(osv.WithUserAgent("git-pkgs/" + version))
 	var history []VulnHistoryEntry
 
 	for _, c := range commits {
