@@ -9,13 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/enrichment"
+	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/git-pkgs/internal/git"
 	"github.com/git-pkgs/purl"
 	"github.com/git-pkgs/spdx"
 	"github.com/spf13/cobra"
 )
+
+// NewEnrichmentClient is the constructor for the enrichment client.
+// Tests can replace this to avoid external API calls.
+var NewEnrichmentClient = enrichment.NewClient
 
 func addLicensesCmd(parent *cobra.Command) {
 	licensesCmd := &cobra.Command{
@@ -283,7 +287,7 @@ func getLicenseData(db *database.DB, purls []string, purlToDep map[string]databa
 
 	// Fetch uncached from API
 	if len(uncachedPurls) > 0 {
-		client, err := enrichment.NewClient()
+		client, err := NewEnrichmentClient()
 		if err != nil {
 			return nil, err
 		}

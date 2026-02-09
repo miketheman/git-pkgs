@@ -2,13 +2,48 @@ package cmd_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/git-pkgs/enrichment"
 	"github.com/git-pkgs/git-pkgs/cmd"
 	"github.com/git-pkgs/spdx"
 )
+
+// mockEnrichmentClient returns canned license data instead of calling external APIs.
+type mockEnrichmentClient struct {
+	packages map[string]*enrichment.PackageInfo
+}
+
+func (m *mockEnrichmentClient) BulkLookup(_ context.Context, purls []string) (map[string]*enrichment.PackageInfo, error) {
+	result := make(map[string]*enrichment.PackageInfo)
+	for _, p := range purls {
+		if pkg, ok := m.packages[p]; ok {
+			result[p] = pkg
+		}
+	}
+	return result, nil
+}
+
+func (m *mockEnrichmentClient) GetVersions(_ context.Context, _ string) ([]enrichment.VersionInfo, error) {
+	return nil, nil
+}
+
+func (m *mockEnrichmentClient) GetVersion(_ context.Context, _ string) (*enrichment.VersionInfo, error) {
+	return nil, nil
+}
+
+// setMockEnrichment replaces the enrichment client constructor with one that
+// returns a mock, and returns a cleanup function to restore the original.
+func setMockEnrichment(packages map[string]*enrichment.PackageInfo) func() {
+	orig := cmd.NewEnrichmentClient
+	cmd.NewEnrichmentClient = func() (enrichment.Client, error) {
+		return &mockEnrichmentClient{packages: packages}, nil
+	}
+	return func() { cmd.NewEnrichmentClient = orig }
+}
 
 // Gemfile with a known copyleft dependency (sidekiq uses LGPL)
 const gemfileWithLGPL = `source 'https://rubygems.org'
@@ -17,11 +52,13 @@ gem 'rails'
 `
 
 func TestLicensesCommand(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
 	t.Run("permissive flag detects non-permissive licenses", func(t *testing.T) {
+		restore := setMockEnrichment(map[string]*enrichment.PackageInfo{
+			"pkg:gem/sidekiq": {Ecosystem: "rubygems", Name: "sidekiq", License: "LGPL-3.0-or-later"},
+			"pkg:gem/rails":   {Ecosystem: "rubygems", Name: "rails", License: "MIT"},
+		})
+		defer restore()
+
 		repoDir := createTestRepo(t)
 		addFileAndCommit(t, repoDir, "Gemfile", gemfileWithLGPL, "Add Gemfile")
 
@@ -43,25 +80,24 @@ func TestLicensesCommand(t *testing.T) {
 		err := rootCmd.Execute()
 		output := stdout.String()
 
-		// Test must verify one of these outcomes:
-		// 1. LGPL was detected and flagged (success)
-		// 2. Command ran without error and produced output (acceptable if API unavailable)
-		if len(output) == 0 && err != nil {
-			t.Fatalf("licenses command failed with no output: %v", err)
+		if !strings.Contains(output, "LGPL") {
+			t.Fatalf("expected LGPL in output, got: %s", output)
 		}
-
-		// If LGPL is in output but not flagged, that's a bug
-		if strings.Contains(output, "LGPL") && !strings.Contains(output, "FLAGGED") {
+		if !strings.Contains(output, "FLAGGED") {
 			t.Error("LGPL license detected but not flagged as non-permissive")
 		}
-
-		// If flagged, command must return error
-		if strings.Contains(output, "FLAGGED") && err == nil {
+		if err == nil {
 			t.Error("expected command to return error when violations found")
 		}
 	})
 
 	t.Run("deny flag blocks specified licenses", func(t *testing.T) {
+		restore := setMockEnrichment(map[string]*enrichment.PackageInfo{
+			"pkg:gem/sidekiq": {Ecosystem: "rubygems", Name: "sidekiq", License: "LGPL-3.0-or-later"},
+			"pkg:gem/rails":   {Ecosystem: "rubygems", Name: "rails", License: "MIT"},
+		})
+		defer restore()
+
 		repoDir := createTestRepo(t)
 		addFileAndCommit(t, repoDir, "Gemfile", gemfileWithLGPL, "Add Gemfile")
 
@@ -83,22 +119,24 @@ func TestLicensesCommand(t *testing.T) {
 		err := rootCmd.Execute()
 		output := stdout.String()
 
-		if len(output) == 0 && err != nil {
-			t.Fatalf("licenses command failed with no output: %v", err)
+		if !strings.Contains(output, "LGPL") {
+			t.Fatalf("expected LGPL in output, got: %s", output)
 		}
-
-		// If LGPL is detected, it must be flagged as denied
-		if strings.Contains(output, "LGPL") {
-			if !strings.Contains(output, "FLAGGED") {
-				t.Error("LGPL license detected but not flagged as denied")
-			}
-			if err == nil {
-				t.Error("expected command to return error when denied license found")
-			}
+		if !strings.Contains(output, "FLAGGED") {
+			t.Error("LGPL license detected but not flagged as denied")
+		}
+		if err == nil {
+			t.Error("expected command to return error when denied license found")
 		}
 	})
 
 	t.Run("copyleft flag detects copyleft licenses", func(t *testing.T) {
+		restore := setMockEnrichment(map[string]*enrichment.PackageInfo{
+			"pkg:gem/sidekiq": {Ecosystem: "rubygems", Name: "sidekiq", License: "LGPL-3.0-or-later"},
+			"pkg:gem/rails":   {Ecosystem: "rubygems", Name: "rails", License: "MIT"},
+		})
+		defer restore()
+
 		repoDir := createTestRepo(t)
 		addFileAndCommit(t, repoDir, "Gemfile", gemfileWithLGPL, "Add Gemfile")
 
@@ -120,22 +158,24 @@ func TestLicensesCommand(t *testing.T) {
 		err := rootCmd.Execute()
 		output := stdout.String()
 
-		if len(output) == 0 && err != nil {
-			t.Fatalf("licenses command failed with no output: %v", err)
+		if !strings.Contains(output, "LGPL") {
+			t.Fatalf("expected LGPL in output, got: %s", output)
 		}
-
-		// If LGPL is detected, it must be flagged as copyleft
-		if strings.Contains(output, "LGPL") {
-			if !strings.Contains(output, "FLAGGED") {
-				t.Error("LGPL license detected but not flagged as copyleft")
-			}
-			if err == nil {
-				t.Error("expected command to return error when copyleft license found")
-			}
+		if !strings.Contains(output, "FLAGGED") {
+			t.Error("LGPL license detected but not flagged as copyleft")
+		}
+		if err == nil {
+			t.Error("expected command to return error when copyleft license found")
 		}
 	})
 
 	t.Run("json output format", func(t *testing.T) {
+		restore := setMockEnrichment(map[string]*enrichment.PackageInfo{
+			"pkg:npm/express": {Ecosystem: "npm", Name: "express", License: "MIT"},
+			"pkg:npm/lodash":  {Ecosystem: "npm", Name: "lodash", License: "MIT"},
+		})
+		defer restore()
+
 		repoDir := createTestRepo(t)
 		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
 
@@ -153,8 +193,6 @@ func TestLicensesCommand(t *testing.T) {
 		rootCmd.SetArgs([]string{"licenses", "--format", "json"})
 		rootCmd.SetOut(&stdout)
 		rootCmd.SetErr(&stderr)
-
-		// Command may return error if there are violations, that's expected
 		_ = rootCmd.Execute()
 
 		output := stdout.String()
@@ -162,22 +200,26 @@ func TestLicensesCommand(t *testing.T) {
 			t.Fatal("expected JSON output, got empty string")
 		}
 
-		// Must be valid JSON array
 		var result []map[string]interface{}
 		if err := json.Unmarshal([]byte(output), &result); err != nil {
 			t.Fatalf("failed to parse JSON output: %v\nOutput: %s", err, output)
 		}
 
-		// If we got results, validate structure
-		if len(result) > 0 {
-			first := result[0]
-			if _, ok := first["name"]; !ok {
-				t.Error("expected 'name' field in license JSON")
-			}
+		if len(result) == 0 {
+			t.Fatal("expected at least one license entry")
+		}
+		if _, ok := result[0]["name"]; !ok {
+			t.Error("expected 'name' field in license JSON")
 		}
 	})
 
 	t.Run("allow flag permits only listed licenses", func(t *testing.T) {
+		restore := setMockEnrichment(map[string]*enrichment.PackageInfo{
+			"pkg:npm/express": {Ecosystem: "npm", Name: "express", License: "MIT"},
+			"pkg:npm/lodash":  {Ecosystem: "npm", Name: "lodash", License: "BSD-3-Clause"},
+		})
+		defer restore()
+
 		repoDir := createTestRepo(t)
 		addFileAndCommit(t, repoDir, "package.json", packageJSON, "Add package.json")
 
@@ -199,14 +241,11 @@ func TestLicensesCommand(t *testing.T) {
 		err := rootCmd.Execute()
 		output := stdout.String()
 
-		if len(output) == 0 && err != nil {
-			t.Fatalf("licenses command failed with no output: %v", err)
+		if !strings.Contains(output, "FLAGGED") {
+			t.Error("non-MIT license (BSD-3-Clause) should be flagged when only MIT is allowed")
 		}
-
-		// If non-MIT licenses appear, they must be flagged
-		hasNonMIT := strings.Contains(output, "Apache") || strings.Contains(output, "BSD") || strings.Contains(output, "ISC")
-		if hasNonMIT && !strings.Contains(output, "not in allow list") && !strings.Contains(output, "FLAGGED") {
-			t.Error("non-MIT licenses detected but not flagged")
+		if err == nil {
+			t.Error("expected command to return error when non-allowed license found")
 		}
 	})
 }
@@ -298,11 +337,12 @@ func TestSpdxNormalization(t *testing.T) {
 // names even when the API returns a canonicalized PURL different from the input.
 // For example, pkg:docker/postgres becomes pkg:docker/library%2Fpostgres in the response.
 func TestLicensesDockerPURLCanonicalization(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
+	restore := setMockEnrichment(map[string]*enrichment.PackageInfo{
+		"pkg:docker/postgres": {Ecosystem: "docker", Name: "postgres", License: "PostgreSQL"},
+		"pkg:docker/redis":    {Ecosystem: "docker", Name: "redis", License: "BSD-3-Clause"},
+	})
+	defer restore()
 
-	// Docker compose file with official images (no library/ prefix)
 	const dockerCompose = `version: '3'
 services:
   db:
@@ -339,7 +379,6 @@ services:
 		t.Fatalf("failed to parse JSON: %v\nOutput: %s", err, output)
 	}
 
-	// Find docker packages and verify they have names
 	for _, r := range results {
 		if strings.Contains(r.PURL, "docker") {
 			if r.Name == "" {
