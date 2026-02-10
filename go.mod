@@ -3,15 +3,15 @@ module github.com/git-pkgs/git-pkgs
 go 1.25.6
 
 require (
-	github.com/git-pkgs/enrichment v0.1.0
+	github.com/git-pkgs/enrichment v0.1.1
 	github.com/git-pkgs/gitignore v1.0.0
 	github.com/git-pkgs/managers v0.5.0
 	github.com/git-pkgs/manifests v0.3.4
 	github.com/git-pkgs/purl v0.1.5
-	github.com/git-pkgs/registries v0.2.3
+	github.com/git-pkgs/registries v0.2.4
 	github.com/git-pkgs/spdx v0.1.0
 	github.com/git-pkgs/vers v0.2.2
-	github.com/git-pkgs/vulns v0.1.1
+	github.com/git-pkgs/vulns v0.1.2
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.10.2
