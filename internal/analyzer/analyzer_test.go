@@ -10,6 +10,7 @@ import (
 	"github.com/git-pkgs/git-pkgs/internal/analyzer"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 func createTestRepo(t *testing.T) string {
@@ -904,5 +905,101 @@ func TestMultipleVersionsSamePackage(t *testing.T) {
 	}
 	if !hasV3 {
 		t.Error("expected isexe@3.1.1 in snapshot")
+	}
+}
+
+func TestDiffCacheEvictedAfterConsume(t *testing.T) {
+	repoDir := createTestRepo(t)
+	addFile(t, repoDir, "README.md", "# Test")
+	commit(t, repoDir, "Initial commit")
+
+	addFile(t, repoDir, "Gemfile", sampleGemfile(map[string]string{"rails": "~> 7.0"}))
+	sha1 := commit(t, repoDir, "Add Gemfile")
+
+	addFile(t, repoDir, "Gemfile", sampleGemfile(map[string]string{"rails": "~> 7.1"}))
+	sha2 := commit(t, repoDir, "Update rails")
+
+	addFile(t, repoDir, "package.json", samplePackageJSON(map[string]string{"lodash": "^4.17.21"}))
+	sha3 := commit(t, repoDir, "Add package.json")
+
+	repo := openRepo(t, repoDir)
+	a := analyzer.New()
+	a.SetRepoPath(repoDir)
+
+	// Collect commits in order
+	var commits []*object.Commit
+	for _, sha := range []string{sha1, sha2, sha3} {
+		h := getCommit(t, repo, sha)
+		c, err := repo.CommitObject(*h)
+		if err != nil {
+			t.Fatalf("failed to get commit %s: %v", sha, err)
+		}
+		commits = append(commits, c)
+	}
+
+	a.PrefetchDiffs(commits, 4)
+
+	if a.DiffCacheLen() != 3 {
+		t.Fatalf("expected 3 prefetched diffs, got %d", a.DiffCacheLen())
+	}
+
+	// Analyze all 3 commits, consuming each cached diff
+	var snapshot analyzer.Snapshot
+	for _, c := range commits {
+		result, err := a.AnalyzeCommit(c, snapshot)
+		if err != nil {
+			t.Fatalf("unexpected error analyzing %s: %v", c.Hash.String()[:7], err)
+		}
+		if result != nil {
+			snapshot = result.Snapshot
+		}
+	}
+
+	if a.DiffCacheLen() != 0 {
+		t.Errorf("expected diffCache to be empty after consuming all entries, got %d", a.DiffCacheLen())
+	}
+}
+
+func TestClearBlobCache(t *testing.T) {
+	repoDir := createTestRepo(t)
+	addFile(t, repoDir, "README.md", "# Test")
+	commit(t, repoDir, "Initial commit")
+
+	addFile(t, repoDir, "Gemfile", sampleGemfile(map[string]string{"rails": "~> 7.0"}))
+	sha := commit(t, repoDir, "Add Gemfile")
+
+	repo := openRepo(t, repoDir)
+	hash := getCommit(t, repo, sha)
+	c, _ := repo.CommitObject(*hash)
+
+	a := analyzer.New()
+	result, err := a.AnalyzeCommit(c, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	if a.BlobCacheLen() == 0 {
+		t.Fatal("expected blobCache to be populated after analysis")
+	}
+
+	a.ClearBlobCache()
+
+	if a.BlobCacheLen() != 0 {
+		t.Errorf("expected blobCache to be empty after clear, got %d", a.BlobCacheLen())
+	}
+
+	// Re-analyze the same commit to verify it still works after clearing
+	result2, err := a.AnalyzeCommit(c, nil)
+	if err != nil {
+		t.Fatalf("unexpected error on re-analysis: %v", err)
+	}
+	if result2 == nil {
+		t.Fatal("expected non-nil result on re-analysis")
+	}
+	if len(result2.Changes) != len(result.Changes) {
+		t.Errorf("expected %d changes on re-analysis, got %d", len(result.Changes), len(result2.Changes))
 	}
 }

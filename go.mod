@@ -3,11 +3,11 @@ module github.com/git-pkgs/git-pkgs
 go 1.25.6
 
 require (
-	github.com/git-pkgs/enrichment v0.1.1
+	github.com/git-pkgs/enrichment v0.1.3
 	github.com/git-pkgs/gitignore v1.0.0
 	github.com/git-pkgs/managers v0.5.0
-	github.com/git-pkgs/manifests v0.3.4
-	github.com/git-pkgs/purl v0.1.5
+	github.com/git-pkgs/manifests v0.3.6
+	github.com/git-pkgs/purl v0.1.8
 	github.com/git-pkgs/registries v0.2.4
 	github.com/git-pkgs/spdx v0.1.0
 	github.com/git-pkgs/vers v0.2.2
@@ -29,8 +29,9 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ecosyste-ms/ecosystems-go v0.1.0 // indirect
+	github.com/ecosyste-ms/ecosystems-go v0.1.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
+	github.com/git-pkgs/packageurl-go v0.2.1 // indirect
 	github.com/github/go-spdx/v2 v2.3.6 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.7.0 // indirect
@@ -42,7 +43,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/oapi-codegen/runtime v1.1.2 // indirect
-	github.com/package-url/packageurl-go v0.1.3 // indirect
 	github.com/pandatix/go-cvss v0.6.2 // indirect
 	github.com/pjbgf/sha1cd v0.5.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect

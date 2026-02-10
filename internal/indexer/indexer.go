@@ -63,15 +63,24 @@ func (idx *Indexer) Run() (*Result, error) {
 		return nil, fmt.Errorf("optimizing database: %w", err)
 	}
 
-	// Collect SHAs that should always have snapshots (tags and branch heads)
-	tagsBySHA := make(map[string][]string)
-	branchesBySHA := make(map[string][]string)
-	if tags, err := idx.repo.Tags(); err == nil {
-		tagsBySHA = tags
+	// Collect tags and branches concurrently with commit collection
+	type refResult struct {
+		tags     map[string][]string
+		branches map[string][]string
 	}
-	if branches, err := idx.repo.LocalBranches(); err == nil {
-		branchesBySHA = branches
-	}
+	refCh := make(chan refResult, 1)
+	go func() {
+		var r refResult
+		r.tags = make(map[string][]string)
+		r.branches = make(map[string][]string)
+		if tags, err := idx.repo.Tags(); err == nil {
+			r.tags = tags
+		}
+		if branches, err := idx.repo.LocalBranches(); err == nil {
+			r.branches = branches
+		}
+		refCh <- r
+	}()
 
 	writer := database.NewBatchWriter(idx.db)
 	if idx.opts.BatchSize > 0 {
@@ -122,6 +131,10 @@ func (idx *Indexer) Run() (*Result, error) {
 	// Prefetch diffs in parallel using git shell commands (thread-safe unlike go-git)
 	idx.analyzer.SetRepoPath(idx.repo.WorkDir())
 	idx.analyzer.PrefetchDiffs(commits, 8)
+
+	refs := <-refCh
+	tagsBySHA := refs.tags
+	branchesBySHA := refs.branches
 
 	result := &Result{}
 	var lastSHAWithChanges string
@@ -239,9 +252,11 @@ func (idx *Indexer) Run() (*Result, error) {
 		}
 
 		if writer.ShouldFlush() {
-			if err := writer.Flush(); err != nil {
+			if err := writer.WaitForFlush(); err != nil {
 				return nil, fmt.Errorf("flushing batch: %w", err)
 			}
+			writer.FlushAsync()
+			idx.analyzer.ClearBlobCache()
 		}
 	}
 
@@ -271,7 +286,7 @@ func (idx *Indexer) Run() (*Result, error) {
 		}
 	}
 
-	// Final flush
+	// Wait for any in-flight async flush, then flush remaining items
 	if err := writer.Flush(); err != nil {
 		return nil, fmt.Errorf("flushing final batch: %w", err)
 	}

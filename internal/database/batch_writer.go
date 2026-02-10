@@ -45,6 +45,8 @@ type BatchWriter struct {
 	snapshotInterval int
 	depCommitCount   int
 	lastSHA          string
+
+	flushDone chan error
 }
 
 func NewBatchWriter(db *DB) *BatchWriter {
@@ -144,7 +146,48 @@ func (w *BatchWriter) ShouldFlush() bool {
 }
 
 func (w *BatchWriter) Flush() error {
-	if len(w.pendingCommits) == 0 {
+	if err := w.WaitForFlush(); err != nil {
+		return err
+	}
+	return w.flushPending(w.takePending())
+}
+
+// FlushAsync swaps the pending slices into a background goroutine that
+// performs the DB transaction. The caller gets fresh empty slices immediately.
+// Call WaitForFlush before the next FlushAsync or Flush to collect the result.
+func (w *BatchWriter) FlushAsync() {
+	commits, changes, snapshots := w.takePending()
+	w.flushDone = make(chan error, 1)
+	ch := w.flushDone
+	go func() {
+		ch <- w.flushPending(commits, changes, snapshots)
+	}()
+}
+
+// WaitForFlush blocks until a previous FlushAsync completes and returns its error.
+// Safe to call when no async flush is in flight (returns nil).
+func (w *BatchWriter) WaitForFlush() error {
+	if w.flushDone == nil {
+		return nil
+	}
+	err := <-w.flushDone
+	w.flushDone = nil
+	return err
+}
+
+// takePending returns the current pending slices and replaces them with fresh empties.
+func (w *BatchWriter) takePending() ([]pendingCommit, []pendingChange, []pendingSnapshot) {
+	commits := w.pendingCommits
+	changes := w.pendingChanges
+	snapshots := w.pendingSnapshots
+	w.pendingCommits = nil
+	w.pendingChanges = nil
+	w.pendingSnapshots = nil
+	return commits, changes, snapshots
+}
+
+func (w *BatchWriter) flushPending(commits []pendingCommit, changes []pendingChange, snapshots []pendingSnapshot) error {
+	if len(commits) == 0 {
 		return nil
 	}
 
@@ -157,33 +200,33 @@ func (w *BatchWriter) Flush() error {
 	now := time.Now()
 
 	// 1. Batch insert commits
-	if err := w.insertCommits(tx, now); err != nil {
+	if err := w.insertCommits(tx, now, commits); err != nil {
 		return fmt.Errorf("inserting commits: %w", err)
 	}
 
 	// 2. Get commit IDs by SHA
-	commitIDs, err := w.getCommitIDs(tx)
+	commitIDs, err := w.getCommitIDs(tx, commits)
 	if err != nil {
 		return fmt.Errorf("getting commit IDs: %w", err)
 	}
 
 	// 3. Batch insert branch_commits
-	if err := w.insertBranchCommits(tx, commitIDs); err != nil {
+	if err := w.insertBranchCommits(tx, commitIDs, commits); err != nil {
 		return fmt.Errorf("inserting branch commits: %w", err)
 	}
 
 	// 4. Ensure manifests exist and get their IDs
-	if err := w.ensureManifests(tx, now); err != nil {
+	if err := w.ensureManifests(tx, now, changes, snapshots); err != nil {
 		return fmt.Errorf("ensuring manifests: %w", err)
 	}
 
 	// 5. Batch insert changes
-	if err := w.insertChanges(tx, commitIDs, now); err != nil {
+	if err := w.insertChanges(tx, commitIDs, now, changes); err != nil {
 		return fmt.Errorf("inserting changes: %w", err)
 	}
 
 	// 6. Batch insert snapshots
-	if err := w.insertSnapshots(tx, commitIDs, now); err != nil {
+	if err := w.insertSnapshots(tx, commitIDs, now, snapshots); err != nil {
 		return fmt.Errorf("inserting snapshots: %w", err)
 	}
 
@@ -191,28 +234,23 @@ func (w *BatchWriter) Flush() error {
 		return fmt.Errorf("committing transaction: %w", err)
 	}
 
-	// Clear pending buffers
-	w.pendingCommits = w.pendingCommits[:0]
-	w.pendingChanges = w.pendingChanges[:0]
-	w.pendingSnapshots = w.pendingSnapshots[:0]
-
 	return nil
 }
 
-func (w *BatchWriter) insertCommits(tx *sql.Tx, now time.Time) error {
-	if len(w.pendingCommits) == 0 {
+func (w *BatchWriter) insertCommits(tx *sql.Tx, now time.Time, pending []pendingCommit) error {
+	if len(pending) == 0 {
 		return nil
 	}
 
 	const columnsPerRow = 8
 	maxRowsPerBatch := MaxSQLVariables / columnsPerRow
 
-	for start := 0; start < len(w.pendingCommits); start += maxRowsPerBatch {
+	for start := 0; start < len(pending); start += maxRowsPerBatch {
 		end := start + maxRowsPerBatch
-		if end > len(w.pendingCommits) {
-			end = len(w.pendingCommits)
+		if end > len(pending) {
+			end = len(pending)
 		}
-		batch := w.pendingCommits[start:end]
+		batch := pending[start:end]
 
 		var sb strings.Builder
 		sb.WriteString("INSERT INTO commits (sha, message, author_name, author_email, committed_at, has_dependency_changes, created_at, updated_at) VALUES ")
@@ -239,19 +277,19 @@ func (w *BatchWriter) insertCommits(tx *sql.Tx, now time.Time) error {
 	return nil
 }
 
-func (w *BatchWriter) getCommitIDs(tx *sql.Tx) (map[string]int64, error) {
-	if len(w.pendingCommits) == 0 {
+func (w *BatchWriter) getCommitIDs(tx *sql.Tx, pending []pendingCommit) (map[string]int64, error) {
+	if len(pending) == 0 {
 		return make(map[string]int64), nil
 	}
 
 	result := make(map[string]int64)
 
-	for start := 0; start < len(w.pendingCommits); start += MaxSQLVariables {
+	for start := 0; start < len(pending); start += MaxSQLVariables {
 		end := start + MaxSQLVariables
-		if end > len(w.pendingCommits) {
-			end = len(w.pendingCommits)
+		if end > len(pending) {
+			end = len(pending)
 		}
-		batch := w.pendingCommits[start:end]
+		batch := pending[start:end]
 
 		shas := make([]any, len(batch))
 		placeholders := make([]string, len(batch))
@@ -285,20 +323,20 @@ func (w *BatchWriter) getCommitIDs(tx *sql.Tx) (map[string]int64, error) {
 	return result, nil
 }
 
-func (w *BatchWriter) insertBranchCommits(tx *sql.Tx, commitIDs map[string]int64) error {
-	if len(w.pendingCommits) == 0 {
+func (w *BatchWriter) insertBranchCommits(tx *sql.Tx, commitIDs map[string]int64, pending []pendingCommit) error {
+	if len(pending) == 0 {
 		return nil
 	}
 
 	const columnsPerRow = 3
 	maxRowsPerBatch := MaxSQLVariables / columnsPerRow
 
-	for start := 0; start < len(w.pendingCommits); start += maxRowsPerBatch {
+	for start := 0; start < len(pending); start += maxRowsPerBatch {
 		end := start + maxRowsPerBatch
-		if end > len(w.pendingCommits) {
-			end = len(w.pendingCommits)
+		if end > len(pending) {
+			end = len(pending)
 		}
-		batch := w.pendingCommits[start:end]
+		batch := pending[start:end]
 
 		var sb strings.Builder
 		sb.WriteString("INSERT INTO branch_commits (branch_id, commit_id, position) VALUES ")
@@ -320,13 +358,13 @@ func (w *BatchWriter) insertBranchCommits(tx *sql.Tx, commitIDs map[string]int64
 	return nil
 }
 
-func (w *BatchWriter) ensureManifests(tx *sql.Tx, now time.Time) error {
+func (w *BatchWriter) ensureManifests(tx *sql.Tx, now time.Time, changes []pendingChange, snapshots []pendingSnapshot) error {
 	// Collect unique manifests from changes and snapshots
 	manifests := make(map[string]ManifestInfo)
-	for _, pc := range w.pendingChanges {
+	for _, pc := range changes {
 		manifests[pc.manifest.Path] = pc.manifest
 	}
-	for _, ps := range w.pendingSnapshots {
+	for _, ps := range snapshots {
 		manifests[ps.manifest.Path] = ps.manifest
 	}
 
@@ -387,8 +425,8 @@ func (w *BatchWriter) ensureManifests(tx *sql.Tx, now time.Time) error {
 	return rows.Err()
 }
 
-func (w *BatchWriter) insertChanges(tx *sql.Tx, commitIDs map[string]int64, now time.Time) error {
-	if len(w.pendingChanges) == 0 {
+func (w *BatchWriter) insertChanges(tx *sql.Tx, commitIDs map[string]int64, now time.Time, pending []pendingChange) error {
+	if len(pending) == 0 {
 		return nil
 	}
 
@@ -396,12 +434,12 @@ func (w *BatchWriter) insertChanges(tx *sql.Tx, commitIDs map[string]int64, now 
 	const columnsPerRow = 11
 	maxRowsPerBatch := MaxSQLVariables / columnsPerRow
 
-	for start := 0; start < len(w.pendingChanges); start += maxRowsPerBatch {
+	for start := 0; start < len(pending); start += maxRowsPerBatch {
 		end := start + maxRowsPerBatch
-		if end > len(w.pendingChanges) {
-			end = len(w.pendingChanges)
+		if end > len(pending) {
+			end = len(pending)
 		}
-		batch := w.pendingChanges[start:end]
+		batch := pending[start:end]
 
 		var sb strings.Builder
 		sb.WriteString("INSERT INTO dependency_changes (commit_id, manifest_id, name, ecosystem, purl, change_type, requirement, previous_requirement, dependency_type, created_at, updated_at) VALUES ")
@@ -435,8 +473,8 @@ func (w *BatchWriter) insertChanges(tx *sql.Tx, commitIDs map[string]int64, now 
 	return nil
 }
 
-func (w *BatchWriter) insertSnapshots(tx *sql.Tx, commitIDs map[string]int64, now time.Time) error {
-	if len(w.pendingSnapshots) == 0 {
+func (w *BatchWriter) insertSnapshots(tx *sql.Tx, commitIDs map[string]int64, now time.Time, pending []pendingSnapshot) error {
+	if len(pending) == 0 {
 		return nil
 	}
 
@@ -444,12 +482,12 @@ func (w *BatchWriter) insertSnapshots(tx *sql.Tx, commitIDs map[string]int64, no
 	const columnsPerRow = 10
 	maxRowsPerBatch := MaxSQLVariables / columnsPerRow
 
-	for start := 0; start < len(w.pendingSnapshots); start += maxRowsPerBatch {
+	for start := 0; start < len(pending); start += maxRowsPerBatch {
 		end := start + maxRowsPerBatch
-		if end > len(w.pendingSnapshots) {
-			end = len(w.pendingSnapshots)
+		if end > len(pending) {
+			end = len(pending)
 		}
-		batch := w.pendingSnapshots[start:end]
+		batch := pending[start:end]
 
 		var sb strings.Builder
 		sb.WriteString("INSERT INTO dependency_snapshots (commit_id, manifest_id, name, ecosystem, purl, requirement, dependency_type, integrity, created_at, updated_at) VALUES ")
