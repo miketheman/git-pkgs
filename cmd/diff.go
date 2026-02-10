@@ -209,37 +209,81 @@ func computeDiff(fromDeps, toDeps []database.Dependency) *DiffResult {
 			continue
 		}
 
-		// Multiple versions on at least one side: compare version sets
-		fromVersions := make(map[string]bool, len(fromList))
+		// Multiple versions on at least one side: count occurrences of each
+		// version and pair net removals with net additions as Modified.
+		fromCounts := make(map[string]int, len(fromList))
 		for _, d := range fromList {
-			fromVersions[d.Requirement] = true
+			fromCounts[d.Requirement]++
 		}
-		toVersions := make(map[string]bool, len(toList))
+		toCounts := make(map[string]int, len(toList))
 		for _, d := range toList {
-			toVersions[d.Requirement] = true
+			toCounts[d.Requirement]++
 		}
 
-		for _, d := range toList {
-			if !fromVersions[d.Requirement] {
-				result.Added = append(result.Added, DiffEntry{
-					Name:           d.Name,
-					Ecosystem:      d.Ecosystem,
-					ManifestPath:   d.ManifestPath,
-					DependencyType: d.DependencyType,
-					ToRequirement:  d.Requirement,
-				})
+		// Use the first entry as a template for metadata.
+		ref := toList[0]
+
+		// Build lists of individual net removals and net additions.
+		var removedVersions []string
+		var addedVersions []string
+
+		// Versions that decreased in count or disappeared entirely.
+		for ver, fc := range fromCounts {
+			tc := toCounts[ver]
+			if delta := fc - tc; delta > 0 {
+				for i := 0; i < delta; i++ {
+					removedVersions = append(removedVersions, ver)
+				}
 			}
 		}
-		for _, d := range fromList {
-			if !toVersions[d.Requirement] {
-				result.Removed = append(result.Removed, DiffEntry{
-					Name:            d.Name,
-					Ecosystem:       d.Ecosystem,
-					ManifestPath:    d.ManifestPath,
-					DependencyType:  d.DependencyType,
-					FromRequirement: d.Requirement,
-				})
+		// Versions that increased in count or appeared for the first time.
+		for ver, tc := range toCounts {
+			fc := fromCounts[ver]
+			if delta := tc - fc; delta > 0 {
+				for i := 0; i < delta; i++ {
+					addedVersions = append(addedVersions, ver)
+				}
 			}
+		}
+
+		// Sort for deterministic pairing.
+		sort.Strings(removedVersions)
+		sort.Strings(addedVersions)
+
+		// Pair removals with additions as Modified.
+		paired := len(removedVersions)
+		if len(addedVersions) < paired {
+			paired = len(addedVersions)
+		}
+		for i := 0; i < paired; i++ {
+			result.Modified = append(result.Modified, DiffEntry{
+				Name:            ref.Name,
+				Ecosystem:       ref.Ecosystem,
+				ManifestPath:    ref.ManifestPath,
+				DependencyType:  ref.DependencyType,
+				FromRequirement: removedVersions[i],
+				ToRequirement:   addedVersions[i],
+			})
+		}
+		// Surplus additions.
+		for i := paired; i < len(addedVersions); i++ {
+			result.Added = append(result.Added, DiffEntry{
+				Name:           ref.Name,
+				Ecosystem:      ref.Ecosystem,
+				ManifestPath:   ref.ManifestPath,
+				DependencyType: ref.DependencyType,
+				ToRequirement:  addedVersions[i],
+			})
+		}
+		// Surplus removals.
+		for i := paired; i < len(removedVersions); i++ {
+			result.Removed = append(result.Removed, DiffEntry{
+				Name:            ref.Name,
+				Ecosystem:       ref.Ecosystem,
+				ManifestPath:    ref.ManifestPath,
+				DependencyType:  ref.DependencyType,
+				FromRequirement: removedVersions[i],
+			})
 		}
 	}
 

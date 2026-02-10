@@ -469,6 +469,103 @@ func TestComputeDiff_DuplicatePackageVersionsInLockfile(t *testing.T) {
 	}
 }
 
+func TestComputeDiff_MultiVersionUpgrade(t *testing.T) {
+	// glob exists at three versions; one version gets a patch bump.
+	// Should produce 1 Modified, not 1 Added + 1 Removed.
+	fromDeps := []database.Dependency{
+		{Name: "glob", Ecosystem: "npm", Requirement: "7.2.3", ManifestPath: "package-lock.json"},
+		{Name: "glob", Ecosystem: "npm", Requirement: "10.5.0", ManifestPath: "package-lock.json"},
+		{Name: "glob", Ecosystem: "npm", Requirement: "13.0.0", ManifestPath: "package-lock.json"},
+	}
+	toDeps := []database.Dependency{
+		{Name: "glob", Ecosystem: "npm", Requirement: "7.2.3", ManifestPath: "package-lock.json"},
+		{Name: "glob", Ecosystem: "npm", Requirement: "10.5.0", ManifestPath: "package-lock.json"},
+		{Name: "glob", Ecosystem: "npm", Requirement: "13.0.1", ManifestPath: "package-lock.json"},
+	}
+
+	result := computeDiff(fromDeps, toDeps)
+
+	if len(result.Added) != 0 {
+		t.Errorf("expected 0 added, got %d: %+v", len(result.Added), result.Added)
+	}
+	if len(result.Removed) != 0 {
+		t.Errorf("expected 0 removed, got %d: %+v", len(result.Removed), result.Removed)
+	}
+	if len(result.Modified) != 1 {
+		t.Fatalf("expected 1 modified, got %d: %+v", len(result.Modified), result.Modified)
+	}
+	if result.Modified[0].FromRequirement != "13.0.0" {
+		t.Errorf("expected FromRequirement '13.0.0', got %s", result.Modified[0].FromRequirement)
+	}
+	if result.Modified[0].ToRequirement != "13.0.1" {
+		t.Errorf("expected ToRequirement '13.0.1', got %s", result.Modified[0].ToRequirement)
+	}
+}
+
+func TestComputeDiff_VersionCountChangeWithUpgrade(t *testing.T) {
+	// isexe goes from 1 copy at 3.1.1 to 5 copies at 3.1.5.
+	// Should produce 1 Modified + 4 Added.
+	fromDeps := []database.Dependency{
+		{Name: "isexe", Ecosystem: "npm", Requirement: "3.1.1", ManifestPath: "package-lock.json"},
+	}
+	toDeps := []database.Dependency{
+		{Name: "isexe", Ecosystem: "npm", Requirement: "3.1.5", ManifestPath: "package-lock.json"},
+		{Name: "isexe", Ecosystem: "npm", Requirement: "3.1.5", ManifestPath: "package-lock.json"},
+		{Name: "isexe", Ecosystem: "npm", Requirement: "3.1.5", ManifestPath: "package-lock.json"},
+		{Name: "isexe", Ecosystem: "npm", Requirement: "3.1.5", ManifestPath: "package-lock.json"},
+		{Name: "isexe", Ecosystem: "npm", Requirement: "3.1.5", ManifestPath: "package-lock.json"},
+	}
+
+	result := computeDiff(fromDeps, toDeps)
+
+	if len(result.Removed) != 0 {
+		t.Errorf("expected 0 removed, got %d: %+v", len(result.Removed), result.Removed)
+	}
+	if len(result.Modified) != 1 {
+		t.Fatalf("expected 1 modified, got %d: %+v", len(result.Modified), result.Modified)
+	}
+	if result.Modified[0].FromRequirement != "3.1.1" {
+		t.Errorf("expected FromRequirement '3.1.1', got %s", result.Modified[0].FromRequirement)
+	}
+	if result.Modified[0].ToRequirement != "3.1.5" {
+		t.Errorf("expected ToRequirement '3.1.5', got %s", result.Modified[0].ToRequirement)
+	}
+	if len(result.Added) != 4 {
+		t.Errorf("expected 4 added, got %d: %+v", len(result.Added), result.Added)
+	}
+}
+
+func TestComputeDiff_MultiVersionMixed(t *testing.T) {
+	// Two versions on both sides. One version unchanged, the other upgraded.
+	// semver stays at 6.3.1 on both sides, 7.7.3 upgrades to 7.7.4.
+	fromDeps := []database.Dependency{
+		{Name: "semver", Ecosystem: "npm", Requirement: "6.3.1", ManifestPath: "package-lock.json"},
+		{Name: "semver", Ecosystem: "npm", Requirement: "7.7.3", ManifestPath: "package-lock.json"},
+	}
+	toDeps := []database.Dependency{
+		{Name: "semver", Ecosystem: "npm", Requirement: "6.3.1", ManifestPath: "package-lock.json"},
+		{Name: "semver", Ecosystem: "npm", Requirement: "7.7.4", ManifestPath: "package-lock.json"},
+	}
+
+	result := computeDiff(fromDeps, toDeps)
+
+	if len(result.Added) != 0 {
+		t.Errorf("expected 0 added, got %d: %+v", len(result.Added), result.Added)
+	}
+	if len(result.Removed) != 0 {
+		t.Errorf("expected 0 removed, got %d: %+v", len(result.Removed), result.Removed)
+	}
+	if len(result.Modified) != 1 {
+		t.Fatalf("expected 1 modified, got %d: %+v", len(result.Modified), result.Modified)
+	}
+	if result.Modified[0].FromRequirement != "7.7.3" {
+		t.Errorf("expected FromRequirement '7.7.3', got %s", result.Modified[0].FromRequirement)
+	}
+	if result.Modified[0].ToRequirement != "7.7.4" {
+		t.Errorf("expected ToRequirement '7.7.4', got %s", result.Modified[0].ToRequirement)
+	}
+}
+
 func containsString(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
