@@ -211,7 +211,7 @@ func getPackageData(db *database.DB, purls []string, purlToDep map[string]databa
 
 	// Fetch uncached from API
 	if len(uncachedPurls) > 0 {
-		client, err := enrichment.NewClient()
+		client, err := enrichment.NewClient(enrichment.WithUserAgent("git-pkgs/" + version))
 		if err != nil {
 			return nil, err
 		}
@@ -289,7 +289,7 @@ func findLatestAtDateCached(db *database.DB, ecosystem, name, purl string, atTim
 	}
 
 	// Fall back to API
-	client, err := enrichment.NewClient()
+	client, err := enrichment.NewClient(enrichment.WithUserAgent("git-pkgs/" + version))
 	if err != nil {
 		return ""
 	}

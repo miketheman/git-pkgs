@@ -19,7 +19,9 @@ import (
 
 // NewEnrichmentClient is the constructor for the enrichment client.
 // Tests can replace this to avoid external API calls.
-var NewEnrichmentClient = enrichment.NewClient
+var NewEnrichmentClient = func(opts ...enrichment.Option) (enrichment.Client, error) {
+	return enrichment.NewClient(opts...)
+}
 
 func addLicensesCmd(parent *cobra.Command) {
 	licensesCmd := &cobra.Command{
@@ -287,7 +289,7 @@ func getLicenseData(db *database.DB, purls []string, purlToDep map[string]databa
 
 	// Fetch uncached from API
 	if len(uncachedPurls) > 0 {
-		client, err := NewEnrichmentClient()
+		client, err := NewEnrichmentClient(enrichment.WithUserAgent("git-pkgs/" + version))
 		if err != nil {
 			return nil, err
 		}

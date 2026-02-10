@@ -268,7 +268,7 @@ func runRegistryCheck(cmd *cobra.Command, deps []database.Dependency, format str
 	}
 
 	// Create enrichment client
-	client, err := enrichment.NewClient()
+	client, err := enrichment.NewClient(enrichment.WithUserAgent("git-pkgs/" + version))
 	if err != nil {
 		return fmt.Errorf("creating enrichment client: %w", err)
 	}
