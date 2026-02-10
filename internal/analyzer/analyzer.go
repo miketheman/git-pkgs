@@ -80,6 +80,24 @@ func (a *Analyzer) SetRepoPath(path string) {
 	a.repoPath = path
 }
 
+// ClearBlobCache replaces the blobCache with a fresh empty map,
+// allowing the GC to reclaim all cached parse results.
+func (a *Analyzer) ClearBlobCache() {
+	a.blobCache = make(map[string]*manifests.ParseResult)
+}
+
+// BlobCacheLen returns the current number of entries in the blob cache.
+func (a *Analyzer) BlobCacheLen() int {
+	return len(a.blobCache)
+}
+
+// DiffCacheLen returns the current number of entries in the diff cache.
+func (a *Analyzer) DiffCacheLen() int {
+	a.diffMu.RLock()
+	defer a.diffMu.RUnlock()
+	return len(a.diffCache)
+}
+
 // PrefetchDiffs pre-computes diffs for all commits using a single git log command.
 // This is much faster than individual git diff-tree calls.
 func (a *Analyzer) PrefetchDiffs(commits []*object.Commit, numWorkers int) {
@@ -211,11 +229,15 @@ func (a *Analyzer) AnalyzeCommit(commit *object.Commit, previousSnapshot Snapsho
 		}
 	}
 
-	// Check for cached diff first
+	// Check for cached diff first (delete after read since each entry is consumed once)
 	var added, modified, deleted []string
-	a.diffMu.RLock()
-	cached, hasCached := a.diffCache[commit.Hash.String()]
-	a.diffMu.RUnlock()
+	commitHash := commit.Hash.String()
+	a.diffMu.Lock()
+	cached, hasCached := a.diffCache[commitHash]
+	if hasCached {
+		delete(a.diffCache, commitHash)
+	}
+	a.diffMu.Unlock()
 
 	if hasCached {
 		added = cached.added
