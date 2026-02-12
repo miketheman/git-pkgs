@@ -132,8 +132,16 @@ func TestPluginExecsWithArgs(t *testing.T) {
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "args.txt")
 
-	script := "#!/bin/sh\necho \"$@\" > " + outFile + "\n"
-	pluginPath := filepath.Join(dir, "git-pkgs-echo")
+	var pluginName string
+	var script string
+	if runtime.GOOS == "windows" {
+		pluginName = "git-pkgs-echo.bat"
+		script = "@echo off\r\necho %* > " + outFile + "\r\n"
+	} else {
+		pluginName = "git-pkgs-echo"
+		script = "#!/bin/sh\necho \"$@\" > " + outFile + "\n"
+	}
+	pluginPath := filepath.Join(dir, pluginName)
 	if err := os.WriteFile(pluginPath, []byte(script), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -152,6 +160,9 @@ func TestPluginExecsWithArgs(t *testing.T) {
 	}
 
 	expected := "foo --bar baz\n"
+	if runtime.GOOS == "windows" {
+		expected = "foo --bar baz \r\n"
+	}
 	if string(got) != expected {
 		t.Errorf("expected %q, got %q", expected, string(got))
 	}

@@ -53,6 +53,12 @@ func discoverPlugins(builtinNames map[string]bool) []plugin {
 			}
 
 			subcommand := strings.TrimPrefix(name, pluginPrefix)
+			if runtime.GOOS == "windows" {
+				ext := strings.ToLower(filepath.Ext(subcommand))
+				if ext == ".exe" || ext == ".bat" || ext == ".cmd" {
+					subcommand = strings.TrimSuffix(subcommand, filepath.Ext(subcommand))
+				}
+			}
 			if subcommand == "" {
 				continue
 			}
