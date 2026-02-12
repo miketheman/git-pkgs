@@ -2,7 +2,7 @@
 
 A git subcommand for tracking package dependencies across git history. Analyzes your repository to show when dependencies were added, modified, or removed, who made those changes, and why. This is a rewrite of the [original Ruby version](https://github.com/andrew/git-pkgs).
 
-[Installation](#installation) · [Quick start](#quick-start) · [Commands](#commands) · [Configuration](#configuration) · [Contributing](#contributing)
+[Installation](#installation) · [Quick start](#quick-start) · [Commands](#commands) · [Plugins](#plugins) · [Configuration](#configuration) · [Contributing](#contributing)
 
 ## Why this exists
 
@@ -593,6 +593,26 @@ Common commands have shorter alternatives:
 - `find` for `where`
 - `audit` for `vulns`
 - `praise` for `blame`
+
+## Plugins
+
+git-pkgs supports external plugins following the same convention as git and kubectl. Any executable on your `$PATH` named `git-pkgs-<name>` becomes available as `git pkgs <name>`.
+
+```bash
+# create a plugin
+cat > ~/bin/git-pkgs-hierarchies <<'EOF'
+#!/bin/sh
+echo "custom plugin running with args: $@"
+EOF
+chmod +x ~/bin/git-pkgs-hierarchies
+
+# use it
+git pkgs hierarchies --some-flag
+```
+
+Plugins appear in a separate "Plugin commands" section in `git pkgs --help`. All arguments and flags are passed through to the plugin unmodified.
+
+If a plugin name collides with a built-in command, the built-in takes precedence. When the same name exists in multiple `$PATH` directories, the first match wins.
 
 ## Configuration
 
