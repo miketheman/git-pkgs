@@ -97,6 +97,9 @@ func NewRootCmd() *cobra.Command {
 	addBrowseCmd(cmd)
 	addVendorCmd(cmd)
 
+	// External plugins (git-pkgs-* on PATH)
+	addPluginCmds(cmd)
+
 	return cmd
 }
 
