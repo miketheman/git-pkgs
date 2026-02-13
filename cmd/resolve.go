@@ -1,11 +1,15 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/git-pkgs/managers"
+	"github.com/git-pkgs/resolve"
+	_ "github.com/git-pkgs/resolve/parsers"
 	"github.com/spf13/cobra"
 )
 
@@ -14,10 +18,10 @@ const defaultResolveTimeout = 5 * time.Minute
 func addResolveCmd(parent *cobra.Command) {
 	resolveCmd := &cobra.Command{
 		Use:   "resolve",
-		Short: "Print dependency graph from the local package manager",
-		Long: `Run the detected package manager's dependency graph command and print
-the raw output. The output format depends on the manager: some produce
-JSON (npm, cargo, pip), others produce text trees (go, maven, poetry).
+		Short: "Print parsed dependency graph from the local package manager",
+		Long: `Run the detected package manager's dependency graph command, parse
+the output into a normalized dependency list with PURLs, and print
+the result as JSON.
 
 Assumes dependencies are already installed. Run 'git-pkgs install' first
 if needed.
@@ -25,13 +29,15 @@ if needed.
 Examples:
   git-pkgs resolve              # resolve dependencies
   git-pkgs resolve -e go        # only resolve Go ecosystem
-  git-pkgs resolve -m cargo     # force cargo`,
+  git-pkgs resolve -m cargo     # force cargo
+  git-pkgs resolve --raw        # print raw manager output`,
 		RunE: runResolve,
 	}
 
 	resolveCmd.Flags().StringP("manager", "m", "", "Override detected package manager (takes precedence over -e)")
 	resolveCmd.Flags().StringP("ecosystem", "e", "", "Filter to specific ecosystem")
 	resolveCmd.Flags().Bool("dry-run", false, "Show what would be run without executing")
+	resolveCmd.Flags().Bool("raw", false, "Print raw manager output instead of parsed JSON")
 	resolveCmd.Flags().StringArrayP("extra", "x", nil, "Extra arguments to pass to package manager")
 	resolveCmd.Flags().DurationP("timeout", "t", defaultResolveTimeout, "Timeout for resolve operation")
 	parent.AddCommand(resolveCmd)
@@ -41,6 +47,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	managerOverride, _ := cmd.Flags().GetString("manager")
 	ecosystem, _ := cmd.Flags().GetString("ecosystem")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	raw, _ := cmd.Flags().GetBool("raw")
 	quiet, _ := cmd.Flags().GetBool("quiet")
 	extra, _ := cmd.Flags().GetStringArray("extra")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
@@ -107,8 +114,27 @@ func runResolve(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		if err := RunManagerCommands(ctx, dir, mgr.Name, "resolve", input, cmd.OutOrStdout(), cmd.ErrOrStderr()); err != nil {
+		if raw {
+			if err := RunManagerCommands(ctx, dir, mgr.Name, "resolve", input, cmd.OutOrStdout(), cmd.ErrOrStderr()); err != nil {
+				return fmt.Errorf("%s resolve failed: %w", mgr.Name, err)
+			}
+			continue
+		}
+
+		var stdout bytes.Buffer
+		if err := RunManagerCommands(ctx, dir, mgr.Name, "resolve", input, &stdout, cmd.ErrOrStderr()); err != nil {
 			return fmt.Errorf("%s resolve failed: %w", mgr.Name, err)
+		}
+
+		result, err := resolve.Parse(mgr.Name, stdout.Bytes())
+		if err != nil {
+			return fmt.Errorf("%s: %w", mgr.Name, err)
+		}
+
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(result); err != nil {
+			return fmt.Errorf("encoding result: %w", err)
 		}
 	}
 

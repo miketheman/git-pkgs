@@ -272,7 +272,7 @@ git pkgs update lodash        # update specific package
 git pkgs resolve              # print dependency graph
 ```
 
-The `resolve` command prints raw dependency graph output from the package manager. Some managers produce JSON (npm, cargo, pip), others produce text trees (go, maven, poetry). Status lines go to stderr so stdout is clean for piping.
+The `resolve` command runs the package manager's dependency graph command, parses the output into a normalized JSON structure with [PURLs](https://github.com/package-url/purl-spec), and prints the result. Use `--raw` to get the unparsed manager output instead.
 
 Supports 35 package managers including npm, pnpm, yarn, bun, deno, bundler, gem, cargo, go, pip, uv, poetry, conda, composer, mix, rebar3, pub, cocoapods, swift, nuget, maven, gradle, sbt, cabal, stack, opam, luarocks, nimble, shards, cpanm, lein, vcpkg, conan, helm, and brew. The package manager is detected from lockfiles in the current directory.
 
