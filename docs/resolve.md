@@ -173,6 +173,28 @@ git pkgs resolve -q \
 git pkgs resolve -q | jq '[.. | select(.Name? == "lodash")]'
 ```
 
+### Show why a transitive dependency is in the tree
+
+Find every path from a direct dependency down to a specific package. This tells you which of your dependencies pulled it in:
+
+```bash
+git pkgs resolve -q | jq --arg pkg "mime-types" '
+  def paths_to($name):
+    if .Name == $name then [.Name]
+    elif (.Deps // []) | length > 0 then
+      .Name as $n | .Deps[] | paths_to($name) | select(length > 0) | [$n] + .
+    else empty
+    end;
+  [.Direct[] | paths_to($pkg)] | unique[] | join(" > ")
+'
+```
+
+```
+express > accepts > mime-types
+```
+
+This walks the dependency tree recursively and prints each chain that leads to the package. If `mime-types` appears under multiple direct dependencies, you'll see all paths.
+
 ### Diff resolved dependencies between branches
 
 ```bash
