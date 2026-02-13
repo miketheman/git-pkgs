@@ -120,6 +120,93 @@ Filter to one ecosystem with `-e`:
 git pkgs resolve -e npm
 ```
 
+## Examples
+
+Since the output is JSON, it works well with [jq](https://jqlang.github.io/jq/) and standard unix tools.
+
+### List all dependency names and versions
+
+```bash
+git pkgs resolve -q | jq -r '.Direct[] | "\(.Name) \(.Version)"'
+```
+
+```
+express 4.18.2
+react 18.2.0
+```
+
+### Extract just the PURLs
+
+```bash
+git pkgs resolve -q | jq -r '.. | .PURL? // empty'
+```
+
+```
+pkg:npm/express@4.18.2
+pkg:npm/accepts@1.3.8
+pkg:npm/react@18.2.0
+```
+
+### Count total dependencies (including transitive)
+
+```bash
+git pkgs resolve -q | jq '[.. | .PURL? // empty] | length'
+```
+
+### Check a specific package against OSV
+
+Grab a PURL from resolve output and query the [OSV API](https://osv.dev) for known vulnerabilities:
+
+```bash
+git pkgs resolve -q \
+  | jq -r '.. | .PURL? // empty' \
+  | while read purl; do
+      curl -s "https://api.osv.dev/v1/query" \
+        -d "{\"package\":{\"purl\":\"$purl\"}}" \
+        | jq -r --arg p "$purl" 'select(.vulns) | "\($p) \(.vulns | length) vulns"'
+    done
+```
+
+### Find all packages matching a name
+
+```bash
+git pkgs resolve -q | jq '[.. | select(.Name? == "lodash")]'
+```
+
+### Diff resolved dependencies between branches
+
+```bash
+diff <(git stash && git pkgs resolve -q | jq -r '.. | .PURL? // empty' | sort) \
+     <(git stash pop && git pkgs resolve -q | jq -r '.. | .PURL? // empty' | sort)
+```
+
+### Save a snapshot for later comparison
+
+```bash
+git pkgs resolve -q > deps-$(date +%Y%m%d).json
+```
+
+### Feed into a Go program
+
+The output matches the `resolve.Result` struct from [github.com/git-pkgs/resolve](https://github.com/git-pkgs/resolve), so you can decode it directly:
+
+```go
+import (
+	"encoding/json"
+	"os/exec"
+
+	"github.com/git-pkgs/resolve"
+)
+
+out, _ := exec.Command("git", "pkgs", "resolve", "-q").Output()
+var result resolve.Result
+json.Unmarshal(out, &result)
+
+for _, dep := range result.Direct {
+	fmt.Println(dep.PURL)
+}
+```
+
 ## How it works
 
 The resolve command calls the manager's dependency graph command (defined in the [managers](https://github.com/git-pkgs/managers) library), captures stdout, and passes it to the [resolve](https://github.com/git-pkgs/resolve) library for parsing. Each parser knows the output format for its manager and builds a normalized `Result`.
