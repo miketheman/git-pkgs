@@ -9,5 +9,6 @@ Technical documentation for git-pkgs maintainers and contributors.
 - [notes.md](notes.md) - Attaching metadata to packages
 - [bisect.md](bisect.md) - Binary search for dependency changes
 - [package-management.md](package-management.md) - Package manager commands
+- [resolve.md](resolve.md) - Dependency graph resolution and parsing
 
 For user-facing documentation, see the main [README](../README.md).

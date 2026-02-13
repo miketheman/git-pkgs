@@ -85,6 +85,17 @@ git pkgs update              # update all
 git pkgs update lodash       # update specific package
 ```
 
+### resolve
+
+Print the parsed dependency graph as JSON with PURLs:
+
+```bash
+git pkgs resolve
+git pkgs resolve --raw   # unparsed manager output
+```
+
+See [resolve.md](resolve.md) for full details on the output format, supported parsers, and PURLs.
+
 ## Multi-ecosystem projects
 
 If your project has multiple lockfiles (e.g., a Rails app with npm for frontend), `install` runs for all detected managers:

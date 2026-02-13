@@ -1,0 +1,127 @@
+# Resolve
+
+`git pkgs resolve` runs the detected package manager's dependency graph command and parses the output into normalized JSON. Every dependency gets a [PURL](https://github.com/package-url/purl-spec) (Package URL), a standard identifier that encodes the ecosystem, name, and version in one string.
+
+```bash
+$ git pkgs resolve
+{
+  "Manager": "npm",
+  "Ecosystem": "npm",
+  "Direct": [
+    {
+      "PURL": "pkg:npm/express@4.18.2",
+      "Name": "express",
+      "Version": "4.18.2",
+      "Deps": [
+        {
+          "PURL": "pkg:npm/accepts@1.3.8",
+          "Name": "accepts",
+          "Version": "1.3.8",
+          "Deps": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+The output goes to stdout. Status lines (detected manager, command being run) go to stderr, so you can pipe the JSON directly into other tools.
+
+## Output structure
+
+Each result contains:
+
+- **Manager** - the package manager that ran (npm, cargo, gomod, etc.)
+- **Ecosystem** - the package ecosystem (npm, cargo, golang, pypi, etc.)
+- **Direct** - the top-level dependencies, each with transitive deps nested under `Deps`
+
+For managers that produce tree output (npm, cargo, go, maven, uv, etc.), `Deps` contains the transitive dependency tree. For managers that only produce flat lists (pip, conda, bundler, helm, nuget, conan), `Deps` is null.
+
+## PURLs
+
+Every dependency includes a PURL string. PURLs follow the [package-url spec](https://github.com/package-url/purl-spec) and look like `pkg:npm/%40scope/name@1.0.0`. They're useful for cross-referencing against vulnerability databases like [OSV](https://osv.dev) and for identifying packages across tools that speak PURL.
+
+Scoped npm packages get URL-encoded: `@babel/core` becomes `pkg:npm/%40babel/core@7.23.0`.
+
+## Supported parsers
+
+24 package managers are supported. The manager name in the first column is what you pass to `-m`.
+
+| Manager | Ecosystem | Output format |
+|---------|-----------|---------------|
+| npm | npm | JSON tree |
+| pnpm | npm | JSON tree |
+| yarn | npm | NDJSON tree |
+| bun | npm | Text tree |
+| cargo | cargo | JSON graph |
+| gomod | golang | Edge list |
+| pip | pypi | JSON flat |
+| uv | pypi | Text tree |
+| poetry | pypi | Text tree |
+| conda | conda | JSON flat |
+| bundler | gem | Text flat |
+| maven | maven | Text tree |
+| gradle | maven | Text tree |
+| composer | packagist | Text tree |
+| nuget | nuget | Tabular |
+| swift | swift | JSON tree |
+| pub | pub | Text tree |
+| mix | hex | Text tree |
+| rebar3 | hex | Text tree |
+| stack | hackage | JSON flat |
+| lein | clojars | Text tree |
+| conan | conan | Custom |
+| deno | deno | JSON flat |
+| helm | helm | Tabular |
+
+## Flags
+
+```
+-m, --manager    Override detected package manager
+-e, --ecosystem  Filter to specific ecosystem
+    --raw        Print raw manager output instead of parsed JSON
+    --dry-run    Show what would be run without executing
+-x, --extra      Extra arguments to pass to package manager
+-t, --timeout    Timeout for resolve operation (default 5m)
+-q, --quiet      Suppress status output on stderr
+```
+
+## Raw mode
+
+`--raw` skips parsing and prints the manager's output as-is. Useful for debugging or when you need the original format:
+
+```bash
+$ git pkgs resolve --raw
+{
+  "version": "1.0.0",
+  "name": "my-project",
+  "dependencies": {
+    "express": {
+      "version": "4.18.2",
+      ...
+    }
+  }
+}
+```
+
+## Multi-ecosystem projects
+
+If your project has multiple lockfiles, resolve runs for each detected manager and outputs one JSON object per manager:
+
+```bash
+$ git pkgs resolve -q
+{"Manager":"bundler","Ecosystem":"gem","Direct":[...]}
+{"Manager":"npm","Ecosystem":"npm","Direct":[...]}
+```
+
+Filter to one ecosystem with `-e`:
+
+```bash
+git pkgs resolve -e npm
+```
+
+## How it works
+
+The resolve command calls the manager's dependency graph command (defined in the [managers](https://github.com/git-pkgs/managers) library), captures stdout, and passes it to the [resolve](https://github.com/git-pkgs/resolve) library for parsing. Each parser knows the output format for its manager and builds a normalized `Result`.
+
+The parsers use an init-registration pattern similar to `database/sql` drivers. The `resolve` package defines the types and `Parse()` function, and the `resolve/parsers` subpackage registers all parser implementations at import time.
