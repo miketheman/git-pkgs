@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/git-pkgs/managers"
@@ -20,14 +21,15 @@ func addResolveCmd(parent *cobra.Command) {
 		Use:   "resolve",
 		Short: "Print parsed dependency graph from the local package manager",
 		Long: `Run the detected package manager's dependency graph command, parse
-the output into a normalized dependency list with PURLs, and print
-the result as JSON.
+the output into a normalized dependency tree with PURLs, and print
+the result.
 
 Assumes dependencies are already installed. Run 'git-pkgs install' first
 if needed.
 
 Examples:
-  git-pkgs resolve              # resolve dependencies
+  git-pkgs resolve              # resolve dependencies (tree output)
+  git-pkgs resolve -f json      # output as JSON
   git-pkgs resolve -e go        # only resolve Go ecosystem
   git-pkgs resolve -m cargo     # force cargo
   git-pkgs resolve --raw        # print raw manager output`,
@@ -40,6 +42,7 @@ Examples:
 	resolveCmd.Flags().Bool("raw", false, "Print raw manager output instead of parsed JSON")
 	resolveCmd.Flags().StringArrayP("extra", "x", nil, "Extra arguments to pass to package manager")
 	resolveCmd.Flags().DurationP("timeout", "t", defaultResolveTimeout, "Timeout for resolve operation")
+	resolveCmd.Flags().StringP("format", "f", "text", "Output format: text, json")
 	parent.AddCommand(resolveCmd)
 }
 
@@ -51,6 +54,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	quiet, _ := cmd.Flags().GetBool("quiet")
 	extra, _ := cmd.Flags().GetStringArray("extra")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
+	format, _ := cmd.Flags().GetString("format")
 
 	dir, err := getWorkingDir()
 	if err != nil {
@@ -131,12 +135,41 @@ func runResolve(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("%s: %w", mgr.Name, err)
 		}
 
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(result); err != nil {
-			return fmt.Errorf("encoding result: %w", err)
+		switch format {
+		case "json":
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			enc.SetIndent("", "  ")
+			if err := enc.Encode(result); err != nil {
+				return fmt.Errorf("encoding result: %w", err)
+			}
+		default:
+			writeResolveTree(cmd.OutOrStdout(), result)
 		}
 	}
 
 	return nil
+}
+
+func writeResolveTree(w io.Writer, result *resolve.Result) {
+	_, _ = fmt.Fprintf(w, "%s (%s)\n", result.Manager, result.Ecosystem)
+	for i, dep := range result.Direct {
+		last := i == len(result.Direct)-1
+		writeResolveDep(w, dep, "", last)
+	}
+}
+
+func writeResolveDep(w io.Writer, dep *resolve.Dep, prefix string, last bool) {
+	connector := "├── "
+	if last {
+		connector = "└── "
+	}
+	_, _ = fmt.Fprintf(w, "%s%s%s@%s\n", prefix, connector, dep.Name, dep.Version)
+
+	childPrefix := prefix + "│   "
+	if last {
+		childPrefix = prefix + "    "
+	}
+	for i, child := range dep.Deps {
+		writeResolveDep(w, child, childPrefix, i == len(dep.Deps)-1)
+	}
 }

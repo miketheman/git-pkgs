@@ -1,9 +1,20 @@
 # Resolve
 
-`git pkgs resolve` runs the detected package manager's dependency graph command and parses the output into normalized JSON. Every dependency gets a [PURL](https://github.com/package-url/purl-spec) (Package URL), a standard identifier that encodes the ecosystem, name, and version in one string.
+`git pkgs resolve` runs the detected package manager's dependency graph command and parses the output into a normalized dependency tree. Every dependency gets a [PURL](https://github.com/package-url/purl-spec) (Package URL), a standard identifier that encodes the ecosystem, name, and version in one string.
 
 ```bash
 $ git pkgs resolve
+npm (npm)
+├── express@4.18.2
+│   ├── accepts@1.3.8
+│   └── body-parser@1.20.1
+└── lodash@4.17.21
+```
+
+Pass `-f json` for machine-readable output:
+
+```bash
+$ git pkgs resolve -f json
 {
   "Manager": "npm",
   "Ecosystem": "npm",
@@ -25,7 +36,7 @@ $ git pkgs resolve
 }
 ```
 
-The output goes to stdout. Status lines (detected manager, command being run) go to stderr, so you can pipe the JSON directly into other tools.
+The output goes to stdout. Status lines (detected manager, command being run) go to stderr, so you can pipe output directly into other tools.
 
 ## Output structure
 
@@ -77,6 +88,7 @@ Scoped npm packages get URL-encoded: `@babel/core` becomes `pkg:npm/%40babel/cor
 ## Flags
 
 ```
+-f, --format     Output format: text, json (default text)
 -m, --manager    Override detected package manager
 -e, --ecosystem  Filter to specific ecosystem
     --raw        Print raw manager output instead of parsed JSON
@@ -106,10 +118,24 @@ $ git pkgs resolve --raw
 
 ## Multi-ecosystem projects
 
-If your project has multiple lockfiles, resolve runs for each detected manager and outputs one JSON object per manager:
+If your project has multiple lockfiles, resolve runs for each detected manager:
 
 ```bash
-$ git pkgs resolve -q
+$ git pkgs resolve
+bundler (gem)
+├── rails@7.1.0
+│   └── actionpack@7.1.0
+└── puma@6.4.0
+
+npm (npm)
+├── express@4.18.2
+└── lodash@4.17.21
+```
+
+With `-f json`, each manager produces a separate JSON object:
+
+```bash
+$ git pkgs resolve -q -f json
 {"Manager":"bundler","Ecosystem":"gem","Direct":[...]}
 {"Manager":"npm","Ecosystem":"npm","Direct":[...]}
 ```
@@ -122,12 +148,12 @@ git pkgs resolve -e npm
 
 ## Examples
 
-Since the output is JSON, it works well with [jq](https://jqlang.github.io/jq/) and standard unix tools.
+The JSON format works well with [jq](https://jqlang.github.io/jq/) and standard unix tools.
 
 ### List all dependency names and versions
 
 ```bash
-git pkgs resolve -q | jq -r '.Direct[] | "\(.Name) \(.Version)"'
+git pkgs resolve -q -f json | jq -r '.Direct[] | "\(.Name) \(.Version)"'
 ```
 
 ```
@@ -138,7 +164,7 @@ react 18.2.0
 ### Extract just the PURLs
 
 ```bash
-git pkgs resolve -q | jq -r '.. | .PURL? // empty'
+git pkgs resolve -q -f json | jq -r '.. | .PURL? // empty'
 ```
 
 ```
@@ -150,7 +176,7 @@ pkg:npm/react@18.2.0
 ### Count total dependencies (including transitive)
 
 ```bash
-git pkgs resolve -q | jq '[.. | .PURL? // empty] | length'
+git pkgs resolve -q -f json | jq '[.. | .PURL? // empty] | length'
 ```
 
 ### Check a specific package against OSV
@@ -158,7 +184,7 @@ git pkgs resolve -q | jq '[.. | .PURL? // empty] | length'
 Grab a PURL from resolve output and query the [OSV API](https://osv.dev) for known vulnerabilities:
 
 ```bash
-git pkgs resolve -q \
+git pkgs resolve -q -f json \
   | jq -r '.. | .PURL? // empty' \
   | while read purl; do
       curl -s "https://api.osv.dev/v1/query" \
@@ -170,7 +196,7 @@ git pkgs resolve -q \
 ### Find all packages matching a name
 
 ```bash
-git pkgs resolve -q | jq '[.. | select(.Name? == "lodash")]'
+git pkgs resolve -q -f json | jq '[.. | select(.Name? == "lodash")]'
 ```
 
 ### Show why a transitive dependency is in the tree
@@ -178,7 +204,7 @@ git pkgs resolve -q | jq '[.. | select(.Name? == "lodash")]'
 Find every path from a direct dependency down to a specific package. This tells you which of your dependencies pulled it in:
 
 ```bash
-git pkgs resolve -q | jq --arg pkg "mime-types" '
+git pkgs resolve -q -f json | jq --arg pkg "mime-types" '
   def paths_to($name):
     if .Name == $name then [.Name]
     elif (.Deps // []) | length > 0 then
@@ -198,14 +224,14 @@ This walks the dependency tree recursively and prints each chain that leads to t
 ### Diff resolved dependencies between branches
 
 ```bash
-diff <(git stash && git pkgs resolve -q | jq -r '.. | .PURL? // empty' | sort) \
-     <(git stash pop && git pkgs resolve -q | jq -r '.. | .PURL? // empty' | sort)
+diff <(git stash && git pkgs resolve -q -f json | jq -r '.. | .PURL? // empty' | sort) \
+     <(git stash pop && git pkgs resolve -q -f json | jq -r '.. | .PURL? // empty' | sort)
 ```
 
 ### Save a snapshot for later comparison
 
 ```bash
-git pkgs resolve -q > deps-$(date +%Y%m%d).json
+git pkgs resolve -q -f json > deps-$(date +%Y%m%d).json
 ```
 
 ### Feed into a Go program
@@ -220,7 +246,7 @@ import (
 	"github.com/git-pkgs/resolve"
 )
 
-out, _ := exec.Command("git", "pkgs", "resolve", "-q").Output()
+out, _ := exec.Command("git", "pkgs", "resolve", "-q", "-f", "json").Output()
 var result resolve.Result
 json.Unmarshal(out, &result)
 
