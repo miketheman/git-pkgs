@@ -53,6 +53,10 @@ func isResolvedDependency(d database.Dependency) bool {
 	return d.Requirement != "" && (d.ManifestKind == "lockfile" || d.Ecosystem == "golang")
 }
 
+func IsPURL(s string) bool {
+	return strings.HasPrefix(s, "pkg:")
+}
+
 func filterByEcosystem(deps []database.Dependency, ecosystem string) []database.Dependency {
 	if ecosystem == "" {
 		return deps

@@ -426,6 +426,26 @@ Gemfile.lock:142:    rails (7.0.8)
 
 Like `grep` but scoped to manifest files that git-pkgs knows about.
 
+### Package URLs
+
+Show registry URLs for a package (registry page, download, documentation, PURL):
+
+```bash
+git pkgs urls pkg:cargo/serde@1.0.0           # from a PURL
+git pkgs urls lodash --ecosystem npm           # from the database
+git pkgs urls pkg:npm/express@4.19.0 -f json   # JSON output
+```
+
+Example output:
+```
+docs       https://docs.rs/serde/1.0.0
+download   https://static.crates.io/crates/serde/serde-1.0.0.crate
+purl       pkg:cargo/serde@1.0.0
+registry   https://crates.io/crates/serde/1.0.0
+```
+
+When given a PURL, no database is needed. When given a plain package name, the database is searched for a matching dependency and the ecosystem is inferred. Use `--ecosystem` to disambiguate when a name appears in multiple ecosystems.
+
 ### Search dependencies
 
 ```bash
