@@ -88,6 +88,7 @@ func NewRootCmd() *cobra.Command {
 	addBisectCmd(cmd)
 	addEcosystemsCmd(cmd)
 	addNotesCmd(cmd)
+	addUrlsCmd(cmd)
 
 	// Package manager commands
 	addInstallCmd(cmd)
