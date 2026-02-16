@@ -38,10 +38,13 @@ Examples:
 }
 
 func runRemove(cmd *cobra.Command, args []string) error {
-	pkg := args[0]
-
 	managerOverride, _ := cmd.Flags().GetString("manager")
-	ecosystem, _ := cmd.Flags().GetString("ecosystem")
+	ecosystemFlag, _ := cmd.Flags().GetString("ecosystem")
+
+	ecosystem, pkg, _, err := ParsePackageArg(args[0], ecosystemFlag)
+	if err != nil {
+		return err
+	}
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	quiet, _ := cmd.Flags().GetBool("quiet")
 	extra, _ := cmd.Flags().GetStringArray("extra")

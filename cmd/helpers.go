@@ -6,6 +6,7 @@ import (
 
 	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/git-pkgs/internal/git"
+	"github.com/git-pkgs/purl"
 )
 
 func openDatabase() (*git.Repository, *database.DB, error) {
@@ -55,6 +56,20 @@ func isResolvedDependency(d database.Dependency) bool {
 
 func IsPURL(s string) bool {
 	return strings.HasPrefix(s, "pkg:")
+}
+
+func ParsePackageArg(arg, ecosystemFlag string) (ecosystem, name, version string, err error) {
+	if IsPURL(arg) {
+		p, err := purl.Parse(arg)
+		if err != nil {
+			return "", "", "", fmt.Errorf("parsing purl: %w", err)
+		}
+		ecosystem = purl.PURLTypeToEcosystem(p.Type)
+		name = p.FullName()
+		version = p.Version
+		return ecosystem, name, version, nil
+	}
+	return ecosystemFlag, arg, "", nil
 }
 
 func filterByEcosystem(deps []database.Dependency, ecosystem string) []database.Dependency {

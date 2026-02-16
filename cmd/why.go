@@ -25,9 +25,13 @@ func addWhyCmd(parent *cobra.Command) {
 }
 
 func runWhy(cmd *cobra.Command, args []string) error {
-	packageName := args[0]
-	ecosystem, _ := cmd.Flags().GetString("ecosystem")
+	ecosystemFlag, _ := cmd.Flags().GetString("ecosystem")
 	format, _ := cmd.Flags().GetString("format")
+
+	ecosystem, packageName, _, err := ParsePackageArg(args[0], ecosystemFlag)
+	if err != nil {
+		return err
+	}
 
 	repo, err := git.OpenRepository(".")
 	if err != nil {

@@ -1413,6 +1413,7 @@ Shows when the package was vulnerable and what vulnerabilities affected it.`,
 	}
 
 	historyCmd.Flags().StringP("branch", "b", "", "Branch to query (default: first tracked branch)")
+	historyCmd.Flags().StringP("ecosystem", "e", "", "Filter by ecosystem")
 	historyCmd.Flags().Int("limit", 50, "Maximum commits to check")
 	historyCmd.Flags().StringP("format", "f", "text", "Output format: text, json")
 	parent.AddCommand(historyCmd)
@@ -1426,10 +1427,15 @@ type VulnHistoryEntry struct {
 }
 
 func runVulnsHistory(cmd *cobra.Command, args []string) error {
-	packageName := args[0]
+	ecosystemFlag, _ := cmd.Flags().GetString("ecosystem")
 	branchName, _ := cmd.Flags().GetString("branch")
 	limit, _ := cmd.Flags().GetInt("limit")
 	format, _ := cmd.Flags().GetString("format")
+
+	ecosystem, packageName, _, err := ParsePackageArg(args[0], ecosystemFlag)
+	if err != nil {
+		return err
+	}
 
 	_, db, err := openDatabase()
 	if err != nil {
@@ -1464,6 +1470,9 @@ func runVulnsHistory(cmd *cobra.Command, args []string) error {
 		var pkgDep *database.Dependency
 		for _, d := range deps {
 			if !strings.EqualFold(d.Name, packageName) {
+				continue
+			}
+			if ecosystem != "" && !strings.EqualFold(d.Ecosystem, ecosystem) {
 				continue
 			}
 			if isResolvedDependency(d) {
