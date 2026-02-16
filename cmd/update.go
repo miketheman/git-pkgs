@@ -39,13 +39,19 @@ Examples:
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
-	var pkg string
-	if len(args) > 0 {
-		pkg = args[0]
-	}
-
 	managerOverride, _ := cmd.Flags().GetString("manager")
-	ecosystem, _ := cmd.Flags().GetString("ecosystem")
+	ecosystemFlag, _ := cmd.Flags().GetString("ecosystem")
+
+	var pkg, ecosystem string
+	if len(args) > 0 {
+		var err error
+		ecosystem, pkg, _, err = ParsePackageArg(args[0], ecosystemFlag)
+		if err != nil {
+			return err
+		}
+	} else {
+		ecosystem = ecosystemFlag
+	}
 	all, _ := cmd.Flags().GetBool("all")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	quiet, _ := cmd.Flags().GetBool("quiet")

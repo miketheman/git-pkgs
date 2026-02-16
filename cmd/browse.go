@@ -56,9 +56,13 @@ Examples:
 }
 
 func runBrowse(cmd *cobra.Command, args []string) error {
-	pkg := args[0]
 	managerOverride, _ := cmd.Flags().GetString("manager")
-	ecosystem, _ := cmd.Flags().GetString("ecosystem")
+	ecosystemFlag, _ := cmd.Flags().GetString("ecosystem")
+
+	ecosystem, pkg, _, err := ParsePackageArg(args[0], ecosystemFlag)
+	if err != nil {
+		return err
+	}
 	printPath, _ := cmd.Flags().GetBool("path")
 	openInBrowser, _ := cmd.Flags().GetBool("open")
 	timeout, _ := cmd.Flags().GetDuration("timeout")

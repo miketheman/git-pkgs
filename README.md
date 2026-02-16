@@ -48,6 +48,7 @@ git pkgs vulns blame    # who introduced each vulnerability
 git pkgs outdated       # find packages with newer versions
 git pkgs update         # update all dependencies
 git pkgs add lodash     # add a package
+git pkgs why pkg:npm/lodash  # use a PURL instead of -e flag
 ```
 
 ## Commands
@@ -118,6 +119,7 @@ Gemfile (rubygems):
 ```bash
 git pkgs history                       # all dependency changes
 git pkgs history rails                 # changes for a specific package
+git pkgs history pkg:gem/rails         # same thing, using a PURL
 git pkgs history --author=alice        # filter by author
 git pkgs history --since=2024-01-01    # changes after date
 git pkgs history --ecosystem=rubygems  # filter by ecosystem
@@ -219,6 +221,7 @@ Manifest Files
 
 ```bash
 git pkgs why rails
+git pkgs why pkg:gem/rails
 ```
 
 This shows the commit that added the dependency along with the author and message.
@@ -266,9 +269,12 @@ git pkgs install --frozen     # CI mode (fail if lockfile would change)
 git pkgs add lodash           # add a package
 git pkgs add rails --dev      # add as dev dependency
 git pkgs add lodash 4.17.21   # add specific version
+git pkgs add pkg:npm/lodash@4.17.21  # same thing, using a PURL
 git pkgs remove lodash        # remove a package
+git pkgs remove pkg:npm/lodash       # remove using a PURL
 git pkgs update               # update all dependencies
 git pkgs update lodash        # update specific package
+git pkgs update pkg:npm/lodash       # update using a PURL
 git pkgs resolve              # print dependency graph
 ```
 
@@ -293,6 +299,7 @@ git pkgs browse lodash           # open in $EDITOR
 git pkgs browse lodash --path    # just print the path
 git pkgs browse lodash --open    # open in file browser
 git pkgs browse serde -m cargo   # specify manager
+git pkgs browse pkg:npm/lodash   # use a PURL
 ```
 
 Use `--path` for scripting:
@@ -337,6 +344,7 @@ git pkgs vulns exposure         # remediation metrics (CRA compliance)
 git pkgs vulns diff main feature # compare vulnerability state between refs
 git pkgs vulns log              # commits that introduced or fixed vulns
 git pkgs vulns history lodash   # vulnerability timeline for a package
+git pkgs vulns history pkg:npm/lodash  # same thing, using a PURL
 git pkgs vulns show CVE-2024-1234  # details about a specific CVE
 ```
 
@@ -416,6 +424,7 @@ Like `git show` but for dependencies. Shows what was added, modified, or removed
 
 ```bash
 git pkgs where rails           # find in manifest files
+git pkgs where pkg:gem/rails   # find using a PURL
 git pkgs where lodash -C 2     # show 2 lines of context
 git pkgs where express --ecosystem=npm
 ```
@@ -448,6 +457,8 @@ registry   https://crates.io/crates/serde/1.0.0
 ```
 
 When given a PURL, no database is needed. When given a plain package name, the database is searched for a matching dependency and the ecosystem is inferred. Use `--ecosystem` to disambiguate when a name appears in multiple ecosystems.
+
+Most commands that take a package name also accept PURLs. A PURL like `pkg:npm/lodash@4.17.21` replaces both the package name and `--ecosystem` flag. For example, `git pkgs why pkg:npm/lodash` is equivalent to `git pkgs why lodash -e npm`. Commands that accept PURLs: `why`, `history`, `where`, `browse`, `add`, `remove`, `update`, `urls`, and `vulns history`.
 
 ### Search dependencies
 

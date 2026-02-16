@@ -29,12 +29,18 @@ Changes are shown in chronological order.`,
 }
 
 func runHistory(cmd *cobra.Command, args []string) error {
-	packageName := ""
-	if len(args) > 0 {
-		packageName = args[0]
-	}
+	ecosystemFlag, _ := cmd.Flags().GetString("ecosystem")
 
-	ecosystem, _ := cmd.Flags().GetString("ecosystem")
+	var packageName, ecosystem string
+	if len(args) > 0 {
+		var err error
+		ecosystem, packageName, _, err = ParsePackageArg(args[0], ecosystemFlag)
+		if err != nil {
+			return err
+		}
+	} else {
+		ecosystem = ecosystemFlag
+	}
 	author, _ := cmd.Flags().GetString("author")
 	since, _ := cmd.Flags().GetString("since")
 	until, _ := cmd.Flags().GetString("until")

@@ -41,8 +41,12 @@ type WhereMatch struct {
 }
 
 func runWhere(cmd *cobra.Command, args []string) error {
-	packageName := args[0]
-	ecosystem, _ := cmd.Flags().GetString("ecosystem")
+	ecosystemFlag, _ := cmd.Flags().GetString("ecosystem")
+
+	ecosystem, packageName, _, err := ParsePackageArg(args[0], ecosystemFlag)
+	if err != nil {
+		return err
+	}
 	context, _ := cmd.Flags().GetInt("context")
 	format, _ := cmd.Flags().GetString("format")
 	includeSubmodules, _ := cmd.Flags().GetBool("include-submodules")
