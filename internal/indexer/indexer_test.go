@@ -494,7 +494,7 @@ func samplePackageLockJSON(deps map[string]string) string {
 	sb.WriteString("{\n  \"name\": \"test\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n")
 	sb.WriteString("    \"\": {\n      \"name\": \"test\",\n      \"version\": \"1.0.0\"\n    }")
 	for path, version := range deps {
-		sb.WriteString(fmt.Sprintf(",\n    \"node_modules/%s\": {\n      \"version\": \"%s\"\n    }", path, version))
+		fmt.Fprintf(&sb, ",\n    \"node_modules/%s\": {\n      \"version\": \"%s\"\n    }", path, version)
 	}
 	sb.WriteString("\n  }\n}\n")
 	return sb.String()
