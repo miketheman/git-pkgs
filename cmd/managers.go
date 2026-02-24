@@ -452,7 +452,7 @@ func RunManagerCommand(ctx context.Context, dir, managerName, operation string, 
 	}
 
 	if result.ExitCode != 0 {
-		return fmt.Errorf("command failed with exit code %d", result.ExitCode)
+		return fmt.Errorf("command failed with exit code %d: %s", result.ExitCode, strings.TrimSpace(result.Stderr))
 	}
 
 	return nil
@@ -484,7 +484,7 @@ func RunManagerCommands(ctx context.Context, dir, managerName, operation string,
 		}
 
 		if result.ExitCode != 0 {
-			return fmt.Errorf("command failed with exit code %d", result.ExitCode)
+			return fmt.Errorf("command failed with exit code %d: %s", result.ExitCode, strings.TrimSpace(result.Stderr))
 		}
 	}
 
