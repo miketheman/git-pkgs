@@ -75,6 +75,7 @@ func NewRootCmd() *cobra.Command {
 	addStaleCmd(cmd)
 	addBranchCmd(cmd)
 	addOutdatedCmd(cmd)
+	addChangelogCmd(cmd)
 	addLicensesCmd(cmd)
 	addIntegrityCmd(cmd)
 	addSBOMCmd(cmd)

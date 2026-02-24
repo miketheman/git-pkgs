@@ -3,7 +3,8 @@ module github.com/git-pkgs/git-pkgs
 go 1.25.7
 
 require (
-	github.com/git-pkgs/enrichment v0.1.4
+	github.com/git-pkgs/changelog v0.1.1
+	github.com/git-pkgs/enrichment v0.1.5
 	github.com/git-pkgs/gitignore v1.0.0
 	github.com/git-pkgs/managers v0.6.0
 	github.com/git-pkgs/manifests v0.3.7
