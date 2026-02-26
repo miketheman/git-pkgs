@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -102,9 +103,13 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	return syncVulnerabilitiesForDeps(db, lockfileDeps, force, quiet, cmd.OutOrStdout())
+}
+
+func syncVulnerabilitiesForDeps(db *database.DB, lockfileDeps []database.Dependency, force, quiet bool, w io.Writer) error {
 	if len(lockfileDeps) == 0 {
 		if !quiet {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No lockfile dependencies to sync.")
+			_, _ = fmt.Fprintln(w, "No lockfile dependencies to sync.")
 		}
 		return nil
 	}
@@ -120,7 +125,7 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 	}
 
 	if !quiet {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Syncing vulnerabilities for %d packages...\n", len(uniquePkgs))
+		_, _ = fmt.Fprintf(w, "Syncing vulnerabilities for %d packages...\n", len(uniquePkgs))
 	}
 
 	source := osv.New(osv.WithUserAgent("git-pkgs/" + version))
@@ -146,7 +151,7 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 
 	if len(purls) == 0 {
 		if !quiet {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "All packages already synced.")
+			_, _ = fmt.Fprintln(w, "All packages already synced.")
 		}
 		return nil
 	}
@@ -238,7 +243,7 @@ func runVulnsSync(cmd *cobra.Command, args []string) error {
 	}
 
 	if !quiet {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Synced %d vulnerabilities for %d packages.\n", totalVulns, len(purls))
+		_, _ = fmt.Fprintf(w, "Synced %d vulnerabilities for %d packages.\n", totalVulns, len(purls))
 	}
 
 	return nil
@@ -279,8 +284,10 @@ func addVulnsScanCmd(parent *cobra.Command) {
 		Long: `Check all dependencies against the OSV database for known vulnerabilities.
 Results are grouped by severity.
 
-By default, uses cached vulnerability data from the database if available.
-Use --live to always query OSV directly.`,
+By default, syncs vulnerability data from OSV before scanning. The sync uses a
+24-hour cache so repeated scans won't re-fetch everything.
+Use --live to query OSV directly for each dependency version.
+Use --no-sync to skip the sync and use only previously cached data.`,
 		RunE: runVulnsScan,
 	}
 
@@ -290,6 +297,7 @@ Use --live to always query OSV directly.`,
 	scanCmd.Flags().StringP("severity", "s", "", "Minimum severity to report: critical, high, medium, low")
 	scanCmd.Flags().StringP("format", "f", "text", "Output format: text, json, sarif")
 	scanCmd.Flags().Bool("live", false, "Query OSV directly instead of using cached data")
+	scanCmd.Flags().Bool("no-sync", false, "Skip auto-sync and use only cached vulnerability data")
 	parent.AddCommand(scanCmd)
 }
 
@@ -300,6 +308,7 @@ func runVulnsScan(cmd *cobra.Command, args []string) error {
 	severity, _ := cmd.Flags().GetString("severity")
 	format, _ := cmd.Flags().GetString("format")
 	live, _ := cmd.Flags().GetBool("live")
+	noSync, _ := cmd.Flags().GetBool("no-sync")
 
 	repo, err := git.OpenRepository(".")
 	if err != nil {
@@ -328,6 +337,13 @@ func runVulnsScan(cmd *cobra.Command, args []string) error {
 	if len(lockfileDeps) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No lockfile dependencies found to scan.")
 		return nil
+	}
+
+	// Auto-sync before cached scan (skip for --live and --no-sync)
+	if !live && !noSync && db != nil {
+		if err := syncVulnerabilitiesForDeps(db, lockfileDeps, false, false, cmd.OutOrStdout()); err != nil {
+			return fmt.Errorf("syncing vulnerabilities: %w", err)
+		}
 	}
 
 	var vulnResults []VulnResult
