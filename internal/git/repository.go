@@ -36,7 +36,17 @@ func OpenRepository(path string) (*Repository, error) {
 	}
 
 	workDir := wt.Filesystem.Root()
-	gitDir := filepath.Join(workDir, ".git")
+
+	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
+	cmd.Dir = workDir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("resolving git common dir: %w", err)
+	}
+	gitDir := filepath.FromSlash(strings.TrimSpace(string(out)))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(workDir, gitDir)
+	}
 
 	return &Repository{
 		repo:    repo,

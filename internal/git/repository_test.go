@@ -90,6 +90,41 @@ func TestOpenRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("opens from worktree", func(t *testing.T) {
+		repoDir := createTestRepo(t)
+		addFile(t, repoDir, "README.md", "# Test")
+		commit(t, repoDir, "Initial commit")
+
+		worktreeDir := filepath.Join(t.TempDir(), "wt")
+		gitRun(t, repoDir, "worktree", "add", worktreeDir, "-b", "wt-branch")
+
+		repo, err := git.OpenRepository(worktreeDir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// git rev-parse resolves symlinks (macOS /var -> /private/var)
+		// but go-git's worktree path does not, so compare each appropriately
+		resolvedRepoDir, err := filepath.EvalSymlinks(repoDir)
+		if err != nil {
+			t.Fatalf("failed to resolve symlinks: %v", err)
+		}
+
+		expectedGitDir := filepath.Join(resolvedRepoDir, ".git")
+		if repo.GitDir() != expectedGitDir {
+			t.Errorf("expected git dir %s, got %s", expectedGitDir, repo.GitDir())
+		}
+
+		if repo.WorkDir() != worktreeDir {
+			t.Errorf("expected work dir %s, got %s", worktreeDir, repo.WorkDir())
+		}
+
+		expectedDBPath := filepath.Join(resolvedRepoDir, ".git", git.DatabaseFile)
+		if repo.DatabasePath() != expectedDBPath {
+			t.Errorf("expected database path %s, got %s", expectedDBPath, repo.DatabasePath())
+		}
+	})
+
 	t.Run("returns error for non-repo", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		_, err := git.OpenRepository(tmpDir)
