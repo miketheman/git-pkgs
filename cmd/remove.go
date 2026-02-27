@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/git-pkgs/managers"
+	"github.com/git-pkgs/resolve"
+	_ "github.com/git-pkgs/resolve/parsers"
 	"github.com/spf13/cobra"
 )
 
@@ -102,6 +105,11 @@ func runRemove(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Check if the package is a transitive dependency before removing
+	if err := checkTransitiveDep(dir, mgr.Name, pkg); err != nil {
+		return err
+	}
+
 	if !quiet {
 		for _, c := range builtCmds {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Running: %v\n", c)
@@ -116,4 +124,63 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// checkTransitiveDep runs the manager's resolve command and checks whether pkg
+// is a direct or transitive dependency. Returns an error only when the package
+// is found exclusively as a transitive dep. If resolve isn't supported or fails,
+// the check is silently skipped so removal can proceed.
+func checkTransitiveDep(dir, managerName, pkg string) error {
+	resolveInput := managers.CommandInput{}
+	_, err := BuildCommands(managerName, "resolve", resolveInput)
+	if err != nil {
+		return nil // resolve not supported, skip check
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultResolveTimeout)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	if err := RunManagerCommands(ctx, dir, managerName, "resolve", resolveInput, &stdout, &bytes.Buffer{}); err != nil {
+		return nil // resolve failed, skip check
+	}
+
+	result, err := resolve.Parse(managerName, stdout.Bytes())
+	if err != nil {
+		return nil // parse failed, skip check
+	}
+
+	isDirect, isTransitive := findDepInTree(result.Direct, pkg)
+	if !isDirect && isTransitive {
+		return fmt.Errorf("cannot remove %s: it is a transitive dependency -- remove the direct dependency that requires it instead", pkg)
+	}
+
+	return nil
+}
+
+// findDepInTree searches the dependency tree for a package by name.
+// Returns whether the package appears as a direct dependency and/or as a
+// transitive dependency (nested under any direct dep).
+func findDepInTree(direct []*resolve.Dep, name string) (isDirect bool, isTransitive bool) {
+	for _, dep := range direct {
+		if dep.Name == name {
+			isDirect = true
+		}
+		if hasTransitiveDep(dep.Deps, name) {
+			isTransitive = true
+		}
+	}
+	return isDirect, isTransitive
+}
+
+func hasTransitiveDep(deps []*resolve.Dep, name string) bool {
+	for _, dep := range deps {
+		if dep.Name == name {
+			return true
+		}
+		if hasTransitiveDep(dep.Deps, name) {
+			return true
+		}
+	}
+	return false
 }
