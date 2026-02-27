@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/git-pkgs/gitignore"
 	"github.com/git-pkgs/manifests"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 )
@@ -98,59 +100,69 @@ func (a *Analyzer) DiffCacheLen() int {
 	return len(a.diffCache)
 }
 
+// ClearDiffCache replaces the diffCache with a fresh empty map,
+// allowing the GC to reclaim all cached diff entries.
+func (a *Analyzer) ClearDiffCache() {
+	a.diffMu.Lock()
+	a.diffCache = make(map[string]*cachedDiff)
+	a.diffMu.Unlock()
+}
+
 // PrefetchDiffs pre-computes diffs for all commits using a single git log command.
-// This is much faster than individual git diff-tree calls.
-func (a *Analyzer) PrefetchDiffs(commits []*object.Commit, numWorkers int) {
-	if len(commits) == 0 || a.repoPath == "" {
+// Output is streamed via StdoutPipe so the raw git output is never held in memory.
+func (a *Analyzer) PrefetchDiffs(hashes []plumbing.Hash, numWorkers int) {
+	if len(hashes) == 0 || a.repoPath == "" {
 		return
 	}
 
-	// Use git log with --name-status to get all diffs in one command
-	lastSHA := commits[len(commits)-1].Hash.String()
-	firstSHA := commits[0].Hash.String()
+	lastSHA := hashes[len(hashes)-1].String()
+	firstSHA := hashes[0].String()
 
-	// git log --name-status --format="COMMIT:%H" --reverse firstSHA^..lastSHA
 	cmd := exec.Command("git", "log", "--name-status", "--format=COMMIT:%H", "--reverse", firstSHA+"^.."+lastSHA)
 	cmd.Dir = a.repoPath
 
-	output, err := cmd.Output()
-	if err != nil {
+	if err := a.prefetchFromCmd(cmd); err != nil {
 		// Fallback for root commits: include first commit
 		cmd = exec.Command("git", "log", "--name-status", "--format=COMMIT:%H", "--reverse", lastSHA)
 		cmd.Dir = a.repoPath
-		output, err = cmd.Output()
-		if err != nil {
-			return
-		}
+		_ = a.prefetchFromCmd(cmd)
+	}
+}
+
+// prefetchFromCmd streams the output of a git log --name-status command and
+// populates the diff cache. The raw output is never buffered as a single allocation.
+func (a *Analyzer) prefetchFromCmd(cmd *exec.Cmd) error {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("creating stdout pipe: %w", err)
 	}
 
-	// Parse the output
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("starting git log: %w", err)
+	}
+
+	scanner := bufio.NewScanner(stdout)
 	var currentSHA string
 	var currentDiff *cachedDiff
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Empty line - just skip
 		if line == "" {
 			continue
 		}
 
-		// COMMIT: line marks a new commit
 		if strings.HasPrefix(line, "COMMIT:") {
-			// Save previous commit
 			if currentSHA != "" && currentDiff != nil {
 				a.diffMu.Lock()
 				a.diffCache[currentSHA] = currentDiff
 				a.diffMu.Unlock()
 			}
-			currentSHA = line[7:] // Remove "COMMIT:" prefix
+			currentSHA = line[7:]
 			currentDiff = &cachedDiff{}
 			continue
 		}
 
-		// Name-status line: A/M/D followed by tab, or R/C followed by digits and tab
 		if currentDiff == nil || len(line) < 2 {
 			continue
 		}
@@ -175,8 +187,6 @@ func (a *Analyzer) PrefetchDiffs(commits []*object.Commit, numWorkers int) {
 			}
 
 		case 'R', 'C':
-			// Rename/Copy: R063\told_path\tnew_path or C063\told_path\tnew_path
-			// Find the first tab to skip the status+percentage
 			firstTab := strings.Index(line, "\t")
 			if firstTab == -1 {
 				continue
@@ -189,7 +199,6 @@ func (a *Analyzer) PrefetchDiffs(commits []*object.Commit, numWorkers int) {
 			oldPath := rest[:secondTab]
 			newPath := rest[secondTab+1:]
 
-			// Treat rename as delete old + add new
 			if _, _, ok := manifests.Identify(oldPath); ok {
 				currentDiff.deleted = append(currentDiff.deleted, oldPath)
 			}
@@ -199,12 +208,14 @@ func (a *Analyzer) PrefetchDiffs(commits []*object.Commit, numWorkers int) {
 		}
 	}
 
-	// Don't forget the last commit
+	// Save the last commit
 	if currentSHA != "" && currentDiff != nil {
 		a.diffMu.Lock()
 		a.diffCache[currentSHA] = currentDiff
 		a.diffMu.Unlock()
 	}
+
+	return cmd.Wait()
 }
 
 func (a *Analyzer) AnalyzeCommit(commit *object.Commit, previousSnapshot Snapshot) (*Result, error) {

@@ -10,7 +10,6 @@ import (
 	"github.com/git-pkgs/git-pkgs/internal/analyzer"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 func createTestRepo(t *testing.T) string {
@@ -926,18 +925,13 @@ func TestDiffCacheEvictedAfterConsume(t *testing.T) {
 	a := analyzer.New()
 	a.SetRepoPath(repoDir)
 
-	// Collect commits in order
-	var commits []*object.Commit
+	// Collect commit hashes in order
+	var hashes []plumbing.Hash
 	for _, sha := range []string{sha1, sha2, sha3} {
-		h := getCommit(t, repo, sha)
-		c, err := repo.CommitObject(*h)
-		if err != nil {
-			t.Fatalf("failed to get commit %s: %v", sha, err)
-		}
-		commits = append(commits, c)
+		hashes = append(hashes, plumbing.NewHash(sha))
 	}
 
-	a.PrefetchDiffs(commits, 4)
+	a.PrefetchDiffs(hashes, 4)
 
 	if a.DiffCacheLen() != 3 {
 		t.Fatalf("expected 3 prefetched diffs, got %d", a.DiffCacheLen())
@@ -945,10 +939,14 @@ func TestDiffCacheEvictedAfterConsume(t *testing.T) {
 
 	// Analyze all 3 commits, consuming each cached diff
 	var snapshot analyzer.Snapshot
-	for _, c := range commits {
+	for _, h := range hashes {
+		c, err := repo.CommitObject(h)
+		if err != nil {
+			t.Fatalf("failed to get commit %s: %v", h.String()[:7], err)
+		}
 		result, err := a.AnalyzeCommit(c, snapshot)
 		if err != nil {
-			t.Fatalf("unexpected error analyzing %s: %v", c.Hash.String()[:7], err)
+			t.Fatalf("unexpected error analyzing %s: %v", h.String()[:7], err)
 		}
 		if result != nil {
 			snapshot = result.Snapshot
@@ -957,6 +955,41 @@ func TestDiffCacheEvictedAfterConsume(t *testing.T) {
 
 	if a.DiffCacheLen() != 0 {
 		t.Errorf("expected diffCache to be empty after consuming all entries, got %d", a.DiffCacheLen())
+	}
+}
+
+func TestClearDiffCache(t *testing.T) {
+	repoDir := createTestRepo(t)
+	addFile(t, repoDir, "README.md", "# Test")
+	commit(t, repoDir, "Initial commit")
+
+	addFile(t, repoDir, "Gemfile", sampleGemfile(map[string]string{"rails": "~> 7.0"}))
+	sha1 := commit(t, repoDir, "Add Gemfile")
+
+	addFile(t, repoDir, "Gemfile", sampleGemfile(map[string]string{"rails": "~> 7.1"}))
+	sha2 := commit(t, repoDir, "Update rails")
+
+	a := analyzer.New()
+	a.SetRepoPath(repoDir)
+
+	hashes := []plumbing.Hash{plumbing.NewHash(sha1), plumbing.NewHash(sha2)}
+	a.PrefetchDiffs(hashes, 4)
+
+	if a.DiffCacheLen() != 2 {
+		t.Fatalf("expected 2 prefetched diffs, got %d", a.DiffCacheLen())
+	}
+
+	a.ClearDiffCache()
+
+	if a.DiffCacheLen() != 0 {
+		t.Errorf("expected diffCache to be empty after clear, got %d", a.DiffCacheLen())
+	}
+
+	// Prefetch again to verify it still works after clearing
+	a.PrefetchDiffs(hashes, 4)
+
+	if a.DiffCacheLen() != 2 {
+		t.Errorf("expected 2 prefetched diffs after re-prefetch, got %d", a.DiffCacheLen())
 	}
 }
 
