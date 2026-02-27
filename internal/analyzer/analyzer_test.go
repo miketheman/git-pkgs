@@ -958,6 +958,41 @@ func TestDiffCacheEvictedAfterConsume(t *testing.T) {
 	}
 }
 
+func TestClearDiffCache(t *testing.T) {
+	repoDir := createTestRepo(t)
+	addFile(t, repoDir, "README.md", "# Test")
+	commit(t, repoDir, "Initial commit")
+
+	addFile(t, repoDir, "Gemfile", sampleGemfile(map[string]string{"rails": "~> 7.0"}))
+	sha1 := commit(t, repoDir, "Add Gemfile")
+
+	addFile(t, repoDir, "Gemfile", sampleGemfile(map[string]string{"rails": "~> 7.1"}))
+	sha2 := commit(t, repoDir, "Update rails")
+
+	a := analyzer.New()
+	a.SetRepoPath(repoDir)
+
+	hashes := []plumbing.Hash{plumbing.NewHash(sha1), plumbing.NewHash(sha2)}
+	a.PrefetchDiffs(hashes, 4)
+
+	if a.DiffCacheLen() != 2 {
+		t.Fatalf("expected 2 prefetched diffs, got %d", a.DiffCacheLen())
+	}
+
+	a.ClearDiffCache()
+
+	if a.DiffCacheLen() != 0 {
+		t.Errorf("expected diffCache to be empty after clear, got %d", a.DiffCacheLen())
+	}
+
+	// Prefetch again to verify it still works after clearing
+	a.PrefetchDiffs(hashes, 4)
+
+	if a.DiffCacheLen() != 2 {
+		t.Errorf("expected 2 prefetched diffs after re-prefetch, got %d", a.DiffCacheLen())
+	}
+}
+
 func TestClearBlobCache(t *testing.T) {
 	repoDir := createTestRepo(t)
 	addFile(t, repoDir, "README.md", "# Test")
