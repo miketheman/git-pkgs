@@ -12,7 +12,7 @@ For best results, commit your lockfiles. Manifests show version ranges but lockf
 
 It works across many ecosystems (Gemfile, package.json, Dockerfile, GitHub Actions workflows) giving you one unified history instead of separate tools per ecosystem. The database lives in your `.git` directory where you can use it in CI to catch dependency changes in pull requests.
 
-The core commands (`list`, `history`, `blame`, `diff`, `stale`, etc.) work entirely from your git history with no network access. Additional commands fetch external data: `vulns` checks [OSV](https://osv.dev) for known CVEs, while `outdated` and `licenses` query [ecosyste.ms](https://packages.ecosyste.ms/) for registry metadata.
+The core commands (`list`, `history`, `blame`, `diff`, `stale`, etc.) work entirely from your git history with no network access. Additional commands fetch external data: `vulns` checks [OSV](https://osv.dev) for known CVEs, `outdated` and `licenses` query [ecosyste.ms](https://packages.ecosyste.ms/) for registry metadata, and `changelog` fetches upstream changelogs so you can see what changed between versions.
 
 ## Installation
 
@@ -46,6 +46,7 @@ git pkgs diff main..feature   # compare branches
 git pkgs vulns          # scan for known CVEs
 git pkgs vulns blame    # who introduced each vulnerability
 git pkgs outdated       # find packages with newer versions
+git pkgs changelog lodash -e npm --from 4.17.20 --to 4.17.21  # view changelog
 git pkgs update         # update all dependencies
 git pkgs add lodash     # add a package
 git pkgs why pkg:npm/lodash  # use a PURL instead of -e flag
@@ -258,6 +259,16 @@ git pkgs outdated --at 2024-03-01  # what was outdated on this date?
 Checks package registries (via [ecosyste.ms](https://packages.ecosyste.ms/)) to find dependencies with newer versions available. Major updates are shown in red, minor in yellow, patch in cyan.
 
 The `--at` flag enables time travel: pass a date (YYYY-MM-DD) or any git ref (tag, branch, commit SHA) to see what was outdated at that point in time. When given a git ref, it uses the commit's date.
+
+### View changelogs
+
+```bash
+git pkgs changelog lodash -e npm --from 4.17.20 --to 4.17.21
+git pkgs changelog pkg:cargo/serde --from 1.0.0 --to 1.0.200
+git pkgs changelog express -e npm   # all entries up to latest
+```
+
+Fetches the upstream changelog for a package and shows entries between two versions. Uses [ecosyste.ms](https://packages.ecosyste.ms/) to find the repository and changelog file, then parses it with [git-pkgs/changelog](https://github.com/git-pkgs/changelog). Supports GitHub and GitLab repositories.
 
 ### Manage dependencies
 
