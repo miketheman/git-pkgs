@@ -43,7 +43,7 @@ func OpenRepository(path string) (*Repository, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolving git common dir: %w", err)
 	}
-	gitDir := strings.TrimSpace(string(out))
+	gitDir := filepath.FromSlash(strings.TrimSpace(string(out)))
 	if !filepath.IsAbs(gitDir) {
 		gitDir = filepath.Join(workDir, gitDir)
 	}
