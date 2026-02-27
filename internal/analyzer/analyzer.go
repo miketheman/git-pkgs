@@ -11,6 +11,7 @@ import (
 	"github.com/git-pkgs/gitignore"
 	"github.com/git-pkgs/manifests"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 )
@@ -100,14 +101,14 @@ func (a *Analyzer) DiffCacheLen() int {
 
 // PrefetchDiffs pre-computes diffs for all commits using a single git log command.
 // This is much faster than individual git diff-tree calls.
-func (a *Analyzer) PrefetchDiffs(commits []*object.Commit, numWorkers int) {
-	if len(commits) == 0 || a.repoPath == "" {
+func (a *Analyzer) PrefetchDiffs(hashes []plumbing.Hash, numWorkers int) {
+	if len(hashes) == 0 || a.repoPath == "" {
 		return
 	}
 
 	// Use git log with --name-status to get all diffs in one command
-	lastSHA := commits[len(commits)-1].Hash.String()
-	firstSHA := commits[0].Hash.String()
+	lastSHA := hashes[len(hashes)-1].String()
+	firstSHA := hashes[0].String()
 
 	// git log --name-status --format="COMMIT:%H" --reverse firstSHA^..lastSHA
 	cmd := exec.Command("git", "log", "--name-status", "--format=COMMIT:%H", "--reverse", firstSHA+"^.."+lastSHA)

@@ -10,7 +10,6 @@ import (
 	"github.com/git-pkgs/git-pkgs/internal/analyzer"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 func createTestRepo(t *testing.T) string {
@@ -926,18 +925,13 @@ func TestDiffCacheEvictedAfterConsume(t *testing.T) {
 	a := analyzer.New()
 	a.SetRepoPath(repoDir)
 
-	// Collect commits in order
-	var commits []*object.Commit
+	// Collect commit hashes in order
+	var hashes []plumbing.Hash
 	for _, sha := range []string{sha1, sha2, sha3} {
-		h := getCommit(t, repo, sha)
-		c, err := repo.CommitObject(*h)
-		if err != nil {
-			t.Fatalf("failed to get commit %s: %v", sha, err)
-		}
-		commits = append(commits, c)
+		hashes = append(hashes, plumbing.NewHash(sha))
 	}
 
-	a.PrefetchDiffs(commits, 4)
+	a.PrefetchDiffs(hashes, 4)
 
 	if a.DiffCacheLen() != 3 {
 		t.Fatalf("expected 3 prefetched diffs, got %d", a.DiffCacheLen())
@@ -945,10 +939,14 @@ func TestDiffCacheEvictedAfterConsume(t *testing.T) {
 
 	// Analyze all 3 commits, consuming each cached diff
 	var snapshot analyzer.Snapshot
-	for _, c := range commits {
+	for _, h := range hashes {
+		c, err := repo.CommitObject(h)
+		if err != nil {
+			t.Fatalf("failed to get commit %s: %v", h.String()[:7], err)
+		}
 		result, err := a.AnalyzeCommit(c, snapshot)
 		if err != nil {
-			t.Fatalf("unexpected error analyzing %s: %v", c.Hash.String()[:7], err)
+			t.Fatalf("unexpected error analyzing %s: %v", h.String()[:7], err)
 		}
 		if result != nil {
 			snapshot = result.Snapshot

@@ -3,11 +3,13 @@ package indexer
 import (
 	"fmt"
 	"io"
+	"os/exec"
+	"strings"
 
 	"github.com/git-pkgs/git-pkgs/internal/analyzer"
 	"github.com/git-pkgs/git-pkgs/internal/database"
 	"github.com/git-pkgs/git-pkgs/internal/git"
-	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing"
 )
 
 type Options struct {
@@ -140,9 +142,14 @@ func (idx *Indexer) Run() (*Result, error) {
 	var lastSHAWithChanges string
 	var firstSnapshotStored bool
 
-	for i, commit := range commits {
+	for i, hash := range commits {
 		if !idx.opts.Quiet && idx.opts.Output != nil && (i+1)%100 == 0 {
 			_, _ = fmt.Fprintf(idx.opts.Output, "  %d/%d commits processed\n", i+1, len(commits))
+		}
+
+		commit, err := idx.repo.CommitObject(hash)
+		if err != nil {
+			continue
 		}
 
 		analysisResult, err := idx.analyzer.AnalyzeCommit(commit, snapshot)
@@ -292,7 +299,7 @@ func (idx *Indexer) Run() (*Result, error) {
 	}
 
 	if len(commits) > 0 {
-		lastSHA := commits[len(commits)-1].Hash.String()
+		lastSHA := commits[len(commits)-1].String()
 		if err := writer.UpdateBranchLastSHA(lastSHA); err != nil {
 			return nil, fmt.Errorf("updating branch last SHA: %w", err)
 		}
@@ -324,39 +331,35 @@ func convertDBSnapshot(dbSnapshot map[string]database.SnapshotInfo) analyzer.Sna
 	return result
 }
 
-func (idx *Indexer) collectCommits(branch string, sinceSHA string) ([]*object.Commit, error) {
-	hash, err := idx.repo.ResolveRevision(branch)
+func (idx *Indexer) collectCommits(branch string, sinceSHA string) ([]plumbing.Hash, error) {
+	var revRange string
+	if sinceSHA != "" {
+		revRange = sinceSHA + ".." + branch
+	} else {
+		revRange = branch
+	}
+
+	cmd := exec.Command("git", "rev-list", "--reverse", revRange)
+	cmd.Dir = idx.repo.WorkDir()
+
+	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("resolving branch %q: %w", branch, err)
+		return nil, fmt.Errorf("running git rev-list: %w", err)
 	}
 
-	iter, err := idx.repo.Log(*hash)
-	if err != nil {
-		return nil, fmt.Errorf("getting log: %w", err)
+	trimmed := strings.TrimSpace(string(output))
+	if trimmed == "" {
+		return nil, nil
 	}
 
-	var commits []*object.Commit
-	err = iter.ForEach(func(c *object.Commit) error {
-		// If we have a sinceSHA, stop when we reach it (don't include it)
-		if sinceSHA != "" && c.Hash.String() == sinceSHA {
-			return errStopIteration
-		}
-		commits = append(commits, c)
-		return nil
-	})
-	if err != nil && err != errStopIteration {
-		return nil, err
+	lines := strings.Split(trimmed, "\n")
+	hashes := make([]plumbing.Hash, len(lines))
+	for i, line := range lines {
+		hashes[i] = plumbing.NewHash(line)
 	}
 
-	// Reverse to process oldest first
-	for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
-		commits[i], commits[j] = commits[j], commits[i]
-	}
-
-	return commits, nil
+	return hashes, nil
 }
-
-var errStopIteration = fmt.Errorf("stop iteration")
 
 func (idx *Indexer) logImportantSnapshot(sha string, tags, branches []string) {
 	if idx.opts.Quiet || idx.opts.Output == nil {
