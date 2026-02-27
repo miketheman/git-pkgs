@@ -5,13 +5,13 @@ go 1.25.7
 require (
 	github.com/git-pkgs/changelog v0.1.1
 	github.com/git-pkgs/enrichment v0.1.5
-	github.com/git-pkgs/gitignore v1.0.0
-	github.com/git-pkgs/managers v0.6.0
-	github.com/git-pkgs/manifests v0.3.7
+	github.com/git-pkgs/gitignore v1.1.0
+	github.com/git-pkgs/managers v0.7.0
+	github.com/git-pkgs/manifests v0.4.0
 	github.com/git-pkgs/purl v0.1.8
 	github.com/git-pkgs/registries v0.2.6
-	github.com/git-pkgs/resolve v0.1.0
-	github.com/git-pkgs/spdx v0.1.0
+	github.com/git-pkgs/resolve v0.1.1
+	github.com/git-pkgs/spdx v0.1.1
 	github.com/git-pkgs/vers v0.2.2
 	github.com/git-pkgs/vulns v0.1.3
 	github.com/go-git/go-git/v5 v5.16.5
@@ -93,7 +93,7 @@ require (
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/ghostiam/protogetter v0.3.20 // indirect
 	github.com/git-pkgs/packageurl-go v0.2.1 // indirect
-	github.com/github/go-spdx/v2 v2.3.6 // indirect
+	github.com/github/go-spdx/v2 v2.4.0 // indirect
 	github.com/go-critic/go-critic v0.14.3 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.7.0 // indirect
