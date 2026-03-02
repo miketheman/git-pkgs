@@ -3,6 +3,7 @@ package indexer
 import (
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -35,6 +36,7 @@ type Indexer struct {
 	db       *database.DB
 	analyzer *analyzer.Analyzer
 	opts     Options
+	isTTY    bool
 }
 
 func New(repo *git.Repository, db *database.DB, opts Options) *Indexer {
@@ -127,6 +129,9 @@ func (idx *Indexer) Run() (*Result, error) {
 	}
 
 	if !idx.opts.Quiet && idx.opts.Output != nil {
+		if fi, err := os.Stdout.Stat(); err == nil {
+			idx.isTTY = fi.Mode()&os.ModeCharDevice != 0
+		}
 		_, _ = fmt.Fprintf(idx.opts.Output, "Analyzing %d commits on %s...\n", len(commits), branch)
 	}
 
@@ -157,7 +162,11 @@ func (idx *Indexer) Run() (*Result, error) {
 			hash := commits[i]
 
 			if !idx.opts.Quiet && idx.opts.Output != nil && (i+1)%100 == 0 {
-				_, _ = fmt.Fprintf(idx.opts.Output, "  %d/%d commits processed\n", i+1, len(commits))
+				if idx.isTTY {
+					_, _ = fmt.Fprintf(idx.opts.Output, "\r  %d/%d commits processed", i+1, len(commits))
+				} else {
+					_, _ = fmt.Fprintf(idx.opts.Output, "  %d/%d commits processed\n", i+1, len(commits))
+				}
 			}
 
 			commit, err := idx.repo.CommitObject(hash)
@@ -282,6 +291,10 @@ func (idx *Indexer) Run() (*Result, error) {
 		idx.analyzer.ClearDiffCache()
 	}
 
+	if !idx.opts.Quiet && idx.opts.Output != nil && idx.isTTY && len(commits) > 0 {
+		_, _ = fmt.Fprintf(idx.opts.Output, "\r\033[K")
+	}
+
 	// Always store final snapshot for the last commit with changes
 	if lastSHAWithChanges != "" && !writer.HasPendingSnapshots(lastSHAWithChanges) {
 		if len(snapshot) == 0 {
@@ -379,6 +392,9 @@ func (idx *Indexer) collectCommits(branch string, sinceSHA string) ([]plumbing.H
 func (idx *Indexer) logImportantSnapshot(sha string, tags, branches []string) {
 	if idx.opts.Quiet || idx.opts.Output == nil {
 		return
+	}
+	if idx.isTTY {
+		_, _ = fmt.Fprintf(idx.opts.Output, "\r\033[K")
 	}
 	shortSHA := sha[:7]
 	for _, tag := range tags {
